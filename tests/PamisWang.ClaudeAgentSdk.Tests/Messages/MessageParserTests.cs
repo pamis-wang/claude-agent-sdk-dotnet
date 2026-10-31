@@ -91,10 +91,10 @@ public sealed class MessageParserTests
         Assert.False(result.IsError);
         Assert.Equal(result.Raw.GetProperty("result").GetString(), result.Result);
         Assert.Contains("玉山", result.Result, StringComparison.Ordinal);
-        Assert.Equal(result.Raw.GetProperty("duration_ms").GetInt64(), result.DurationMs);
+        Assert.Equal(result.Raw.GetProperty("duration_ms").GetInt64(), result.DurationMilliseconds);
         Assert.Equal(result.Raw.GetProperty("total_cost_usd").GetDouble(), result.TotalCostUsd);
         Assert.True(result.TotalCostUsd > 0);
-        Assert.Equal(1, result.NumTurns);
+        Assert.Equal(1, result.TurnCount);
         Assert.Equal("completed", result.TerminalReason);
         Assert.Empty(result.Errors);
     }

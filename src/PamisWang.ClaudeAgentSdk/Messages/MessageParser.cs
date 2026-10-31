@@ -82,9 +82,9 @@ internal static class MessageParser
     {
         Subtype = RequiredString(data, "subtype"),
         IsError = Required(data, "is_error").GetBoolean(),
-        DurationMs = RequiredInt64(data, "duration_ms"),
-        DurationApiMs = RequiredInt64(data, "duration_api_ms"),
-        NumTurns = (int)RequiredInt64(data, "num_turns"),
+        DurationMilliseconds = RequiredInt64(data, "duration_ms"),
+        ApiDurationMilliseconds = RequiredInt64(data, "duration_api_ms"),
+        TurnCount = (int)RequiredInt64(data, "num_turns"),
         Result = OptionalString(data, "result"),
         Errors = Optional(data, "errors") is { ValueKind: JsonValueKind.Array } errors
             ? [.. errors.EnumerateArray().Where(e => e.ValueKind == JsonValueKind.String).Select(e => e.GetString()!)]

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.0-preview.4（2026-10-31）
+
+- **不相容變更**：`ClaudeAgentOptions` 的屬性改成 .NET 慣用的名稱，行為不變：`Cwd` → `WorkingDirectory`、
+  `Env` → `EnvironmentVariables`、`Stderr` → `StandardErrorCallback`、`Resume` → `ResumeSessionId`。
+- **不相容變更**：`ResultMessage` 的屬性改成 .NET 慣用的名稱，型別不變：`DurationMs` → `DurationMilliseconds`、
+  `DurationApiMs` → `ApiDurationMilliseconds`、`NumTurns` → `TurnCount`。
+- `ClaudeAgentOptions` 與 `ResultMessage` 的說明註明對應 Python SDK 的哪個欄位：同名的照 snake_case 對應，
+  名稱不同的在屬性上寫出來。
+
 ## 0.1.0-preview.3（2026-10-31）
 
 - 函式庫沒有變更。git 歷史改寫過（協定樣本去識別化），重新發佈讓套件記錄的 commit 對應到現在的歷史；

@@ -10,11 +10,11 @@ namespace PamisWang.ClaudeAgentSdk;
 
 /// <summary>
 /// 跟 Claude Code 互動式對話：啟動本機的 CLI、送出訊息、接收回覆、批准工具、中斷。對應 Python SDK 的 <c>ClaudeSDKClient</c>。
-/// 一個 client 只連線一次；要重新開始就建立新的 client，用 <see cref="ClaudeAgentOptions.Resume"/> 接續原本的 session。
+/// 一個 client 只連線一次；要重新開始就建立新的 client，用 <see cref="ClaudeAgentOptions.ResumeSessionId"/> 接續原本的 session。
 /// </summary>
 /// <example>
 /// <code>
-/// await using var client = new ClaudeAgentClient(new ClaudeAgentOptions { Cwd = @"D:\work" });
+/// await using var client = new ClaudeAgentClient(new ClaudeAgentOptions { WorkingDirectory = @"D:\work" });
 /// await client.ConnectAsync();
 /// await client.SendAsync("這個專案在做什麼？");
 /// await foreach (var message in client.ReceiveResponseAsync())

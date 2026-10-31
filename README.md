@@ -37,11 +37,11 @@ using PamisWang.ClaudeAgentSdk.Permissions;
 
 var options = new ClaudeAgentOptions
 {
-    Cwd = @"D:\work\my-project",
+    WorkingDirectory = @"D:\work\my-project",
     SystemPrompt = new SystemPromptPreset(), // Claude Code 預設的系統提示詞；不給是空的 / Claude Code's default system prompt; empty if omitted
     Model = "sonnet",
     Effort = "high",
-    Resume = null,                        // 接續舊 session 時填 session ID / a session ID to resume
+    ResumeSessionId = null,               // 接續舊 session 時填 session ID / a session ID to resume
     IncludePartialMessages = true,        // 逐段收到輸出 / receive output as it streams
     DisallowedTools = ["AskUserQuestion"],
     // 工具要執行前詢問；中斷時 cancellationToken 會被取消 / asked before a tool runs; cancelled on interrupt
@@ -70,7 +70,7 @@ await foreach (var message in client.ReceiveResponseAsync())
 
             break;
         case ResultMessage result:
-            Console.WriteLine($"\n{result.Subtype}，{result.DurationMs} ms");
+            Console.WriteLine($"\n{result.Subtype}，{result.DurationMilliseconds} ms");
             break;
     }
 }
@@ -93,8 +93,8 @@ await client.ApplyFlagSettingsAsync(new JsonObject { ["effortLevel"] = "max" });
   `ReceiveResponseAsync` stops after the turn's `ResultMessage`; `ReceiveMessagesAsync` keeps reading across turns, which suits a background receive loop.
 - 每則訊息都有 `Raw`（原始 JSON），沒有對應屬性的欄位從這裡讀；不認得的訊息型別是 `UnknownMessage`，不會被丟掉。
   Every message carries `Raw` (the original JSON) for fields without a property; unrecognized message types arrive as `UnknownMessage` instead of being dropped.
-- 一個 client 只連線一次；要重新開始就建立新的 client，用 `Resume` 接續原本的 session。
-  A client connects once; to start over, create a new client and use `Resume` to continue the session.
+- 一個 client 只連線一次；要重新開始就建立新的 client，用 `ResumeSessionId` 接續原本的 session。
+  A client connects once; to start over, create a new client and use `ResumeSessionId` to continue the session.
 
 ## 範圍 / Scope
 

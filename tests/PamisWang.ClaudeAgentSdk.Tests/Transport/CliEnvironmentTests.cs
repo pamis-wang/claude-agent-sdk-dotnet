@@ -27,7 +27,7 @@ public sealed class CliEnvironmentTests
     [Fact]
     public void Apply_CallerCanSetClaudeCodeBack()
     {
-        var options = new ClaudeAgentOptions { Env = new Dictionary<string, string> { ["CLAUDECODE"] = "1" } };
+        var options = new ClaudeAgentOptions { EnvironmentVariables = new Dictionary<string, string> { ["CLAUDECODE"] = "1" } };
 
         var env = Apply(options, new() { ["CLAUDECODE"] = "inherited" });
 
@@ -39,7 +39,7 @@ public sealed class CliEnvironmentTests
     {
         var options = new ClaudeAgentOptions
         {
-            Env = new Dictionary<string, string>
+            EnvironmentVariables = new Dictionary<string, string>
             {
                 ["CLAUDE_CODE_ENTRYPOINT"] = "sdk-ts",
                 ["CLAUDE_AGENT_SDK_CLIENT_APP"] = "my-app/1.0",
@@ -57,7 +57,7 @@ public sealed class CliEnvironmentTests
     {
         var options = new ClaudeAgentOptions
         {
-            Env = new Dictionary<string, string> { ["CLAUDE_AGENT_SDK_VERSION"] = "9.9.9" },
+            EnvironmentVariables = new Dictionary<string, string> { ["CLAUDE_AGENT_SDK_VERSION"] = "9.9.9" },
         };
 
         var env = Apply(options);
@@ -76,7 +76,7 @@ public sealed class CliEnvironmentTests
     {
         var options = new ClaudeAgentOptions
         {
-            Env = new Dictionary<string, string> { ["CLAUDE_CODE_SDK_READS_SESSION_STATE"] = "0" },
+            EnvironmentVariables = new Dictionary<string, string> { ["CLAUDE_CODE_SDK_READS_SESSION_STATE"] = "0" },
         };
 
         Assert.Equal("0", Apply(options)["CLAUDE_CODE_SDK_READS_SESSION_STATE"]);
@@ -92,15 +92,15 @@ public sealed class CliEnvironmentTests
     }
 
     [Fact]
-    public void Apply_WithCwd_SetsPwd()
+    public void Apply_WithWorkingDirectory_SetsPwd()
     {
-        var env = Apply(new ClaudeAgentOptions { Cwd = "/work/project" }, new() { ["PWD"] = "/elsewhere" });
+        var env = Apply(new ClaudeAgentOptions { WorkingDirectory = "/work/project" }, new() { ["PWD"] = "/elsewhere" });
 
         Assert.Equal("/work/project", env["PWD"]);
     }
 
     [Fact]
-    public void Apply_WithoutCwd_KeepsInheritedPwd()
+    public void Apply_WithoutWorkingDirectory_KeepsInheritedPwd()
     {
         var env = Apply(new ClaudeAgentOptions(), new() { ["PWD"] = "/elsewhere" });
 
