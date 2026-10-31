@@ -21,7 +21,7 @@ public sealed class CliArgumentsTests
         var options = new ClaudeAgentOptions
         {
             Model = "haiku",
-            Resume = "34953276-f9da-4b8c-a789-77d8ee05bc37",
+            ResumeSessionId = "34953276-f9da-4b8c-a789-77d8ee05bc37",
             IncludePartialMessages = true,
             DisallowedTools = ["AskUserQuestion", "Bash"],
         };
@@ -46,7 +46,7 @@ public sealed class CliArgumentsTests
         var options = new ClaudeAgentOptions
         {
             Model = "haiku",
-            Resume = "abc",
+            ResumeSessionId = "abc",
             CanUseTool = (_, _) => Task.FromResult<PermissionResult>(new PermissionResultAllow()),
         };
 
@@ -133,10 +133,10 @@ public sealed class CliArgumentsTests
     }
 
     [Fact]
-    public void Build_ResumeStartingWithDash_StaysOneArgument()
+    public void Build_ResumeSessionIdStartingWithDash_StaysOneArgument()
     {
         // 分成兩個參數的話，CLI 會把 --model 當成另一個旗標
-        var args = CliArguments.Build(new ClaudeAgentOptions { Resume = "--model" }, isWindows: false);
+        var args = CliArguments.Build(new ClaudeAgentOptions { ResumeSessionId = "--model" }, isWindows: false);
 
         Assert.Contains("--resume=--model", args);
         Assert.DoesNotContain("--model", args);
@@ -151,9 +151,9 @@ public sealed class CliArgumentsTests
     [InlineData("a!b")]
     [InlineData("a\"b")]
     [InlineData("a\nb")]
-    public void Build_OnWindows_RejectsCmdMetacharactersInResume(string resume)
+    public void Build_OnWindows_RejectsCmdMetacharactersInResumeSessionId(string resume)
     {
-        var options = new ClaudeAgentOptions { Resume = resume };
+        var options = new ClaudeAgentOptions { ResumeSessionId = resume };
 
         Assert.Throws<ArgumentException>(() => CliArguments.Build(options, isWindows: true));
     }
@@ -161,23 +161,23 @@ public sealed class CliArgumentsTests
     [Fact]
     public void Build_OnWindows_AcceptsOrdinarySessionTitle()
     {
-        var args = CliArguments.Build(new ClaudeAgentOptions { Resume = "重構 server (v2)" }, isWindows: true);
+        var args = CliArguments.Build(new ClaudeAgentOptions { ResumeSessionId = "重構 server (v2)" }, isWindows: true);
 
         Assert.Contains("--resume=重構 server (v2)", args);
     }
 
     [Fact]
-    public void Build_OffWindows_AllowsAnyResumeValue()
+    public void Build_OffWindows_AllowsAnyResumeSessionId()
     {
-        var args = CliArguments.Build(new ClaudeAgentOptions { Resume = "a&b" }, isWindows: false);
+        var args = CliArguments.Build(new ClaudeAgentOptions { ResumeSessionId = "a&b" }, isWindows: false);
 
         Assert.Contains("--resume=a&b", args);
     }
 
     [Fact]
-    public void Build_EmptyResumeAndModel_AreOmitted()
+    public void Build_EmptyResumeSessionIdAndModel_AreOmitted()
     {
-        var args = CliArguments.Build(new ClaudeAgentOptions { Resume = "", Model = "" }, isWindows: false);
+        var args = CliArguments.Build(new ClaudeAgentOptions { ResumeSessionId = "", Model = "" }, isWindows: false);
 
         Assert.DoesNotContain(args, arg => arg.StartsWith("--resume", StringComparison.Ordinal));
         Assert.DoesNotContain("--model", args);

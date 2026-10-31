@@ -5,6 +5,7 @@ namespace PamisWang.ClaudeAgentSdk;
 
 /// <summary>
 /// 啟動 Claude Code 的選項。對應 Python SDK 的 <c>ClaudeAgentOptions</c>，目前只有第一版要用到的部分。
+/// 屬性對應 Python 的同名欄位（例如 <c>CliPath</c> 是 <c>cli_path</c>）；名稱不同的，在屬性的說明註明。
 /// </summary>
 public sealed class ClaudeAgentOptions
 {
@@ -16,8 +17,9 @@ public sealed class ClaudeAgentOptions
 
     /// <summary>
     /// 工作目錄，也決定 session 存在 <c>~/.claude/projects</c> 底下的哪個資料夾。沒指定就沿用目前程序的。
+    /// 對應 Python 的 <c>cwd</c>。
     /// </summary>
-    public string? Cwd { get; init; }
+    public string? WorkingDirectory { get; init; }
 
     /// <summary>
     /// 系統提示詞。沒指定時跟 Python SDK 一樣傳空的系統提示詞，不用 Claude Code 預設的；
@@ -38,8 +40,8 @@ public sealed class ClaudeAgentOptions
     /// </summary>
     public string? Effort { get; init; }
 
-    /// <summary>要接續的 session ID（<c>--resume</c>）。</summary>
-    public string? Resume { get; init; }
+    /// <summary>要接續的 session ID（<c>--resume</c>）。對應 Python 的 <c>resume</c>。</summary>
+    public string? ResumeSessionId { get; init; }
 
     /// <summary>是否接收部分訊息（<c>--include-partial-messages</c>）：模型輸出時逐段送來的 <c>stream_event</c>。</summary>
     public bool IncludePartialMessages { get; init; }
@@ -53,13 +55,14 @@ public sealed class ClaudeAgentOptions
     /// </summary>
     public Func<ToolPermissionRequest, CancellationToken, Task<PermissionResult>>? CanUseTool { get; init; }
 
-    /// <summary>額外的環境變數，蓋過繼承自目前程序的同名變數。</summary>
-    public IReadOnlyDictionary<string, string> Env { get; init; } = ReadOnlyDictionary<string, string>.Empty;
+    /// <summary>額外的環境變數，蓋過繼承自目前程序的同名變數。對應 Python 的 <c>env</c>。</summary>
+    public IReadOnlyDictionary<string, string> EnvironmentVariables { get; init; } = ReadOnlyDictionary<string, string>.Empty;
 
     /// <summary>
     /// 每收到一行 CLI 的 stderr 就呼叫一次，空行不算。沒指定時不導向 stderr，CLI 直接寫到目前程序的 stderr。
+    /// 對應 Python 的 <c>stderr</c>。
     /// </summary>
-    public Action<string>? Stderr { get; init; }
+    public Action<string>? StandardErrorCallback { get; init; }
 
     /// <summary>
     /// 單一則訊息的大小上限（位元組）。超過就丟出 <see cref="CliJsonDecodeException"/>，避免異常的輸出吃光記憶體。

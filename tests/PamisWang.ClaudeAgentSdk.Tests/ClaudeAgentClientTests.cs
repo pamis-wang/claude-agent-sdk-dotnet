@@ -98,8 +98,8 @@ public sealed class ClaudeAgentClientTests : IDisposable
         var options = new ClaudeAgentOptions
         {
             CliPath = FakeClaude.Path,
-            Cwd = _cwd.Path,
-            Env = new Dictionary<string, string> { ["FAKE_CLAUDE_MODE"] = "chat" },
+            WorkingDirectory = _cwd.Path,
+            EnvironmentVariables = new Dictionary<string, string> { ["FAKE_CLAUDE_MODE"] = "chat" },
             CanUseTool = (request, _) =>
             {
                 asked = request;
@@ -127,8 +127,8 @@ public sealed class ClaudeAgentClientTests : IDisposable
         var options = new ClaudeAgentOptions
         {
             CliPath = FakeClaude.Path,
-            Cwd = _cwd.Path,
-            Env = new Dictionary<string, string> { ["FAKE_CLAUDE_MODE"] = "chat" },
+            WorkingDirectory = _cwd.Path,
+            EnvironmentVariables = new Dictionary<string, string> { ["FAKE_CLAUDE_MODE"] = "chat" },
         };
         await using var client = new ClaudeAgentClient(options);
         await client.ConnectAsync().WaitAsync(Timeout);
@@ -206,7 +206,7 @@ public sealed class ClaudeAgentClientTests : IDisposable
     [Fact]
     public async Task ConnectAsync_CliMissing_ThrowsAndClientIsClosed()
     {
-        var client = new ClaudeAgentClient(new ClaudeAgentOptions { CliPath = Path.Combine(_cwd.Path, "claude.exe"), Cwd = _cwd.Path });
+        var client = new ClaudeAgentClient(new ClaudeAgentOptions { CliPath = Path.Combine(_cwd.Path, "claude.exe"), WorkingDirectory = _cwd.Path });
 
         await Assert.ThrowsAsync<CliNotFoundException>(() => client.ConnectAsync());
 

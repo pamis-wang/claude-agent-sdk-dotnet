@@ -12,7 +12,7 @@ internal static class CliArguments
     private static readonly SearchValues<char> CmdExeMetacharacterValues = SearchValues.Create(CmdExeMetacharacters);
 
     /// <summary>組出參數，不含執行檔本身。</summary>
-    /// <exception cref="ArgumentException">Windows 上 <see cref="ClaudeAgentOptions.Resume"/> 含有 cmd.exe 的特殊字元。</exception>
+    /// <exception cref="ArgumentException">Windows 上 <see cref="ClaudeAgentOptions.ResumeSessionId"/> 含有 cmd.exe 的特殊字元。</exception>
     public static IReadOnlyList<string> Build(ClaudeAgentOptions options, bool isWindows)
     {
         List<string> args = ["--output-format", "stream-json", "--verbose"];
@@ -53,15 +53,15 @@ internal static class CliArguments
             args.AddRange(["--permission-prompt-tool", "stdio"]);
         }
 
-        if (!string.IsNullOrEmpty(options.Resume))
+        if (!string.IsNullOrEmpty(options.ResumeSessionId))
         {
             if (isWindows)
             {
-                RejectWindowsCmdMetacharacters(nameof(options.Resume), options.Resume);
+                RejectWindowsCmdMetacharacters(nameof(options.ResumeSessionId), options.ResumeSessionId);
             }
 
             // 寫成 --resume=<值>：--resume 的值可以省略，分成兩個參數時，- 開頭的值會被當成另一個旗標
-            args.Add($"--resume={options.Resume}");
+            args.Add($"--resume={options.ResumeSessionId}");
         }
 
         if (options.IncludePartialMessages)

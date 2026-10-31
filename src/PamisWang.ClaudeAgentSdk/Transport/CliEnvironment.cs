@@ -16,11 +16,11 @@ internal static class CliEnvironment
     /// <summary>修改 <paramref name="environment"/>，一開始應該是目前程序的環境變數。</summary>
     public static void Apply(IDictionary<string, string?> environment, ClaudeAgentOptions options)
     {
-        // 不讓 CLI 以為自己在另一個 Claude Code 裡面執行；呼叫端真的要的話可以從 Env 設回來
+        // 不讓 CLI 以為自己在另一個 Claude Code 裡面執行；呼叫端真的要的話可以從 EnvironmentVariables 設回來
         environment.Remove("CLAUDECODE");
         environment["CLAUDE_CODE_ENTRYPOINT"] = Entrypoint;
 
-        foreach (var (key, value) in options.Env)
+        foreach (var (key, value) in options.EnvironmentVariables)
         {
             environment[key] = value;
         }
@@ -40,9 +40,9 @@ internal static class CliEnvironment
             environment["CLAUDE_CODE_SDK_READS_SESSION_STATE"] = "1";
         }
 
-        if (options.Cwd is not null)
+        if (options.WorkingDirectory is not null)
         {
-            environment["PWD"] = options.Cwd;
+            environment["PWD"] = options.WorkingDirectory;
         }
     }
 

@@ -177,7 +177,7 @@ public sealed class SubprocessTransportTests : IDisposable
     [Fact]
     public async Task ConnectAsync_MissingWorkingDirectory_ThrowsCliConnectionException()
     {
-        var options = new ClaudeAgentOptions { CliPath = FakeClaude.Path, Cwd = Path.Combine(_cwd.Path, "沒有這個資料夾") };
+        var options = new ClaudeAgentOptions { CliPath = FakeClaude.Path, WorkingDirectory = Path.Combine(_cwd.Path, "沒有這個資料夾") };
         await using var transport = new SubprocessTransport(options);
 
         var error = await Assert.ThrowsAsync<CliConnectionException>(() => transport.ConnectAsync());
@@ -187,7 +187,7 @@ public sealed class SubprocessTransportTests : IDisposable
     [Fact]
     public async Task ConnectAsync_MissingExecutable_ThrowsCliNotFoundException()
     {
-        var options = new ClaudeAgentOptions { CliPath = Path.Combine(_cwd.Path, "claude.exe"), Cwd = _cwd.Path };
+        var options = new ClaudeAgentOptions { CliPath = Path.Combine(_cwd.Path, "claude.exe"), WorkingDirectory = _cwd.Path };
         await using var transport = new SubprocessTransport(options);
 
         await Assert.ThrowsAsync<CliNotFoundException>(() => transport.ConnectAsync());
@@ -196,7 +196,7 @@ public sealed class SubprocessTransportTests : IDisposable
     [Fact]
     public async Task ConnectAsync_BatchFileOnWindows_IsRefusedBeforeStarting()
     {
-        var options = new ClaudeAgentOptions { CliPath = _cwd.CreateFile("claude.cmd"), Cwd = _cwd.Path };
+        var options = new ClaudeAgentOptions { CliPath = _cwd.CreateFile("claude.cmd"), WorkingDirectory = _cwd.Path };
         var locator = new CliLocator(pathVariable: null, _cwd.Path, isWindows: true);
         await using var transport = new SubprocessTransport(options, locator);
 
@@ -213,13 +213,13 @@ public sealed class SubprocessTransportTests : IDisposable
         return new ClaudeAgentOptions
         {
             CliPath = FakeClaude.Path,
-            Cwd = _cwd.Path,
+            WorkingDirectory = _cwd.Path,
             Model = "haiku",
-            Resume = "34953276-f9da-4b8c-a789-77d8ee05bc37",
+            ResumeSessionId = "34953276-f9da-4b8c-a789-77d8ee05bc37",
             IncludePartialMessages = true,
             DisallowedTools = ["AskUserQuestion"],
-            Env = allEnv,
-            Stderr = stderr,
+            EnvironmentVariables = allEnv,
+            StandardErrorCallback = stderr,
         };
     }
 

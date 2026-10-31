@@ -55,9 +55,9 @@ internal sealed class SubprocessTransport : ITransport
         var cliPath = _locator.Find(_options.CliPath);
         _locator.EnsureRunnable(cliPath);
 
-        if (_options.Cwd is not null && !Directory.Exists(_options.Cwd))
+        if (_options.WorkingDirectory is not null && !Directory.Exists(_options.WorkingDirectory))
         {
-            throw new CliConnectionException($"工作目錄不存在：{_options.Cwd}");
+            throw new CliConnectionException($"工作目錄不存在：{_options.WorkingDirectory}");
         }
 
         var startInfo = new ProcessStartInfo(cliPath)
@@ -67,11 +67,11 @@ internal sealed class SubprocessTransport : ITransport
             RedirectStandardInput = true,
             RedirectStandardOutput = true,
             StandardInputEncoding = Utf8NoBom,
-            WorkingDirectory = _options.Cwd ?? "",
+            WorkingDirectory = _options.WorkingDirectory ?? "",
         };
         // 有 callback 才導向 stderr：沒導向就不用讀，也就不會因為沒人讀而塞滿管線。
         // 編碼只能在有導向時設定，不然 Process.Start 會丟例外
-        if (_options.Stderr is not null)
+        if (_options.StandardErrorCallback is not null)
         {
             startInfo.RedirectStandardError = true;
             startInfo.StandardErrorEncoding = Utf8NoBom;
@@ -105,7 +105,7 @@ internal sealed class SubprocessTransport : ITransport
         // stdout 直接讀位元組，由 NdjsonReader 切行後再解碼
         _stdout = PipeReader.Create(process.StandardOutput.BaseStream);
         _stdin = process.StandardInput;
-        if (_options.Stderr is { } callback)
+        if (_options.StandardErrorCallback is { } callback)
         {
             _stderrPump = PumpStderrAsync(process.StandardError, callback);
         }

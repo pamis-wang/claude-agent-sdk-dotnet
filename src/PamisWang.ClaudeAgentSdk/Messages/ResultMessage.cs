@@ -2,7 +2,10 @@ using System.Text.Json;
 
 namespace PamisWang.ClaudeAgentSdk.Messages;
 
-/// <summary>一輪結束（<c>type: result</c>）：成功、出錯或被中斷，附上耗時、費用與用量。</summary>
+/// <summary>
+/// 一輪結束（<c>type: result</c>）：成功、出錯或被中斷，附上耗時、費用與用量。
+/// 屬性對應 Python SDK <c>ResultMessage</c> 的同名欄位；名稱不同的，在屬性的說明註明。
+/// </summary>
 public sealed record ResultMessage : ClaudeMessage
 {
     /// <summary><c>success</c>，或 <c>error_during_execution</c>、<c>error_max_turns</c> 這類錯誤。</summary>
@@ -11,14 +14,14 @@ public sealed record ResultMessage : ClaudeMessage
     /// <summary>這一輪是否以錯誤結束，例如被中斷。</summary>
     public required bool IsError { get; init; }
 
-    /// <summary>這一輪花的時間（毫秒）。</summary>
-    public required long DurationMs { get; init; }
+    /// <summary>這一輪花的時間（毫秒）。對應 Python 的 <c>duration_ms</c>。</summary>
+    public required long DurationMilliseconds { get; init; }
 
-    /// <summary>其中等 API 回應的時間（毫秒）。</summary>
-    public required long DurationApiMs { get; init; }
+    /// <summary>其中等 API 回應的時間（毫秒）。對應 Python 的 <c>duration_api_ms</c>。</summary>
+    public required long ApiDurationMilliseconds { get; init; }
 
-    /// <summary>這一輪來回呼叫模型的次數。</summary>
-    public required int NumTurns { get; init; }
+    /// <summary>這一輪來回呼叫模型的次數。對應 Python 的 <c>num_turns</c>。</summary>
+    public required int TurnCount { get; init; }
 
     /// <summary>成功時模型最後的回覆文字；出錯時是 <see langword="null"/>，原因見 <see cref="Errors"/>。</summary>
     public string? Result { get; init; }
