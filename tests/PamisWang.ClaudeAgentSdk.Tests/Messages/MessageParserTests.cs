@@ -111,6 +111,31 @@ public sealed class MessageParserTests
     }
 
     [Fact]
+    public void Parse_NotLoggedIn_ExposesAuthenticationFailure()
+    {
+        // CLI 2.1.309 沒登入時送出的兩則訊息，只留相關欄位
+        var assistant = Assert.IsType<AssistantMessage>(Parse("""
+            {"type":"assistant","message":{"id":"m1","model":"<synthetic>","role":"assistant","stop_reason":"stop_sequence","type":"message",
+            "content":[{"type":"text","text":"Not logged in · Please run /login"}]},
+            "parent_tool_use_id":null,"session_id":"s1","uuid":"u1","error":"authentication_failed","is_api_error_message":true}
+            """));
+        var result = Assert.IsType<ResultMessage>(Parse("""
+            {"type":"result","subtype":"success","is_error":true,"duration_ms":158,"duration_api_ms":0,"num_turns":1,
+            "result":"Not logged in · Please run /login","stop_reason":"stop_sequence","session_id":"s1","total_cost_usd":0,
+            "permission_denials":[],"terminal_reason":"api_error","api_error_status":null,"uuid":"u2"}
+            """));
+
+        Assert.Equal("authentication_failed", assistant.Error);
+        // 沒有 error_ 開頭的 subtype，只有 IsError 與 TerminalReason 看得出出錯；錯誤訊息放在 Result
+        Assert.Equal("success", result.Subtype);
+        Assert.True(result.IsError);
+        Assert.Equal("api_error", result.TerminalReason);
+        Assert.Equal("Not logged in · Please run /login", result.Result);
+        Assert.Empty(result.Errors);
+        Assert.Null(result.ApiErrorStatus);
+    }
+
+    [Fact]
     public void Parse_ResultWithDenials_ReadsDeniedTool()
     {
         var result = First<ResultMessage>("permission_deny", _ => true);

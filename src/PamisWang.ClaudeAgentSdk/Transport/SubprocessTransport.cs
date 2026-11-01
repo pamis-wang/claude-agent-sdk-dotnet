@@ -41,15 +41,18 @@ internal sealed class SubprocessTransport : ITransport
     /// <summary>關 stdin 後等 CLI 自己結束的時間，也是每個收尾步驟的等待上限。測試會調短。</summary>
     internal TimeSpan ShutdownGracePeriod { get; init; } = TimeSpan.FromSeconds(5);
 
+    /// <summary>等 <c>claude -v</c> 回報版本的時間，跟 Python SDK 一樣。測試會調短。</summary>
+    internal TimeSpan VersionCheckTimeout { get; init; } = TimeSpan.FromSeconds(2);
+
     internal int? ProcessId => _process?.Id;
 
     public bool IsReady => _ready;
 
-    public Task ConnectAsync(CancellationToken cancellationToken = default)
+    public async Task ConnectAsync(CancellationToken cancellationToken = default)
     {
         if (_process is not null)
         {
-            return Task.CompletedTask;
+            return;
         }
 
         var cliPath = _locator.Find(_options.CliPath);
@@ -58,6 +61,14 @@ internal sealed class SubprocessTransport : ITransport
         if (_options.WorkingDirectory is not null && !Directory.Exists(_options.WorkingDirectory))
         {
             throw new CliConnectionException($"工作目錄不存在：{_options.WorkingDirectory}");
+        }
+
+        // 版本只用來警告，沒有地方送警告就不多啟動一次 CLI
+        if (_options.WarningCallback is { } warn
+            && string.IsNullOrEmpty(Environment.GetEnvironmentVariable(CliVersionCheck.SkipVariable)))
+        {
+            await CliVersionCheck.RunAsync(cliPath, _options, warn, VersionCheckTimeout, cancellationToken)
+                .ConfigureAwait(false);
         }
 
         var startInfo = new ProcessStartInfo(cliPath)
@@ -111,7 +122,6 @@ internal sealed class SubprocessTransport : ITransport
         }
 
         _ready = true;
-        return Task.CompletedTask;
     }
 
     public async Task WriteAsync(string data, CancellationToken cancellationToken = default)

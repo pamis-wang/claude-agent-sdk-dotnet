@@ -11,7 +11,9 @@ public sealed record ResultMessage : ClaudeMessage
     /// <summary><c>success</c>，或 <c>error_during_execution</c>、<c>error_max_turns</c> 這類錯誤。</summary>
     public required string Subtype { get; init; }
 
-    /// <summary>這一輪是否以錯誤結束，例如被中斷。</summary>
+    /// <summary>
+    /// 這一輪是否以錯誤結束，例如被中斷。API 錯誤（例如沒登入）時 <see cref="Subtype"/> 仍是 <c>success</c>，只有這裡是 <see langword="true"/>。
+    /// </summary>
     public required bool IsError { get; init; }
 
     /// <summary>這一輪花的時間（毫秒）。對應 Python 的 <c>duration_ms</c>。</summary>
@@ -23,7 +25,10 @@ public sealed record ResultMessage : ClaudeMessage
     /// <summary>這一輪來回呼叫模型的次數。對應 Python 的 <c>num_turns</c>。</summary>
     public required int TurnCount { get; init; }
 
-    /// <summary>成功時模型最後的回覆文字；出錯時是 <see langword="null"/>，原因見 <see cref="Errors"/>。</summary>
+    /// <summary>
+    /// 模型最後的回覆文字。<see cref="Subtype"/> 是 <c>error_</c> 開頭的錯誤時是 <see langword="null"/>，原因見 <see cref="Errors"/>；
+    /// API 錯誤（例如沒登入）時是錯誤訊息，錯誤的種類見那一輪 <see cref="AssistantMessage.Error"/>。
+    /// </summary>
     public string? Result { get; init; }
 
     /// <summary>出錯的說明。</summary>

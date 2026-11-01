@@ -11,6 +11,19 @@ using var stdin = Console.OpenStandardInput();
 using var stdout = Console.OpenStandardOutput();
 using var stderr = Console.OpenStandardError();
 
+// 版本檢查：回報 FAKE_CLAUDE_VERSION 的內容；值是 hang 就一直不回，要等 SDK 逾時
+if (args is ["-v"])
+{
+    var version = Environment.GetEnvironmentVariable("FAKE_CLAUDE_VERSION") ?? "2.1.309 (Claude Code)";
+    if (version == "hang")
+    {
+        await Task.Delay(Timeout.Infinite);
+    }
+
+    WriteText(stdout, version + "\n");
+    return 0;
+}
+
 switch (mode)
 {
     case "echo":

@@ -206,7 +206,56 @@ public sealed class SubprocessTransportTests : IDisposable
         Assert.Null(transport.ProcessId);
     }
 
-    private ClaudeAgentOptions Options(string mode, Action<string>? stderr = null, Dictionary<string, string>? env = null)
+    [Fact]
+    public async Task ConnectAsync_CliOlderThanMinimum_WarnsAndStillConnects()
+    {
+        List<string> warnings = [];
+        var options = Options("echo", env: new() { ["FAKE_CLAUDE_VERSION"] = "1.0.128 (Claude Code)" }, warning: warnings.Add);
+        await using var transport = new SubprocessTransport(options);
+
+        await transport.ConnectAsync();
+
+        var warning = Assert.Single(warnings);
+        Assert.Contains("1.0.128", warning, StringComparison.Ordinal);
+        Assert.Contains("2.0.0", warning, StringComparison.Ordinal);
+        Assert.Contains(FakeClaude.Path, warning, StringComparison.Ordinal);
+        Assert.True(transport.IsReady);
+    }
+
+    [Theory]
+    [InlineData("2.0.0 (Claude Code)")]
+    [InlineData("2.1.309 (Claude Code)")]
+    [InlineData("看不懂的輸出")]
+    public async Task ConnectAsync_SupportedOrUnreadableVersion_DoesNotWarn(string version)
+    {
+        List<string> warnings = [];
+        var options = Options("echo", env: new() { ["FAKE_CLAUDE_VERSION"] = version }, warning: warnings.Add);
+        await using var transport = new SubprocessTransport(options);
+
+        await transport.ConnectAsync();
+
+        Assert.Empty(warnings);
+        Assert.True(transport.IsReady);
+    }
+
+    [Fact]
+    public async Task ConnectAsync_VersionCheckTimesOut_ConnectsWithoutWarning()
+    {
+        List<string> warnings = [];
+        var options = Options("echo", env: new() { ["FAKE_CLAUDE_VERSION"] = "hang" }, warning: warnings.Add);
+        await using var transport = new SubprocessTransport(options) { VersionCheckTimeout = TimeSpan.FromMilliseconds(200) };
+
+        await transport.ConnectAsync();
+
+        Assert.Empty(warnings);
+        Assert.True(transport.IsReady);
+    }
+
+    private ClaudeAgentOptions Options(
+        string mode,
+        Action<string>? stderr = null,
+        Dictionary<string, string>? env = null,
+        Action<string>? warning = null)
     {
         var allEnv = env ?? [];
         allEnv["FAKE_CLAUDE_MODE"] = mode;
@@ -220,6 +269,7 @@ public sealed class SubprocessTransportTests : IDisposable
             DisallowedTools = ["AskUserQuestion"],
             EnvironmentVariables = allEnv,
             StandardErrorCallback = stderr,
+            WarningCallback = warning,
         };
     }
 
