@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.0-preview.6（2026-11-01）
+
+- 函式庫沒有變更。重新發佈讓 NuGet 頁面換成新的 README。
+- README 改成英文為主（GitHub 與 NuGet 預設顯示這份），中文版移到 `README.zh-TW.md`；
+  新增「跟官方 SDK 比較」一節。
+- 新增 `docs/`：跟官方 Python、TypeScript SDK 的功能對照，以及跟 PamisWang.CodexAgentSdk 的對照，各有英文與中文版。
+
 ## 0.1.0-preview.5（2026-11-01）
 
 - `ClaudeAgentOptions.WarningCallback`：這個套件自己的警告。指定時連線前會執行 `claude -v`，
