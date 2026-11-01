@@ -1,6 +1,6 @@
 # Changelog
 
-## 未發佈
+## 0.1.0-preview.5（2026-11-01）
 
 - `ClaudeAgentOptions.WarningCallback`：這個套件自己的警告。指定時連線前會執行 `claude -v`，
   版本低於 2.0.0 就警告，不中斷連線；對應 Python SDK 的 `_check_claude_version`，
