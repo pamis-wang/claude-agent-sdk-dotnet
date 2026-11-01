@@ -10,7 +10,7 @@ How `PamisWang.ClaudeAgentSdk` compares with Anthropic's official Claude Agent S
 - .NET: PamisWang.ClaudeAgentSdk 0.1.0-preview.5 (52ec29e)
 - The .NET package tracks Python 0.2.174; 0.2.175 and 0.2.176 only update the bundled Claude CLI (2.1.314, 2.1.316) with no API changes, so features are compared against the latest release. TypeScript columns are based on the `sdk.d.ts` types in the package.
 
-Related: [Claude .NET vs Codex .NET](claude-vs-codex-dotnet.md). The comparison of Codex .NET with the official SDKs is in `docs/comparison-with-official-sdks.md` of the codex-agent-sdk-dotnet repo.
+Related: [Claude .NET vs Codex .NET](claude-vs-codex-dotnet.md). The [comparison of Codex .NET with the official SDKs](https://github.com/pamis-wang/codex-agent-sdk-dotnet/blob/main/docs/comparison-with-official-sdks.md) is in the codex-agent-sdk-dotnet repo.
 
 ## Key points
 

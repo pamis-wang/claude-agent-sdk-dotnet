@@ -10,7 +10,7 @@
 - .NET：PamisWang.ClaudeAgentSdk 0.1.0-preview.5（52ec29e）
 - .NET 版對照 Python 0.2.174；0.2.175、0.2.176 只更新打包的 Claude CLI（2.1.314、2.1.316），API 沒有變動，所以功能面仍以最新版對照。TypeScript 欄位依套件內的 `sdk.d.ts` 型別判斷。
 
-相關文件：[Claude .NET vs Codex .NET](claude-vs-codex-dotnet.zh-TW.md)。Codex .NET 與官方 SDK 的對照在 codex-agent-sdk-dotnet repo 的 `docs/comparison-with-official-sdks.zh-TW.md`。
+相關文件：[Claude .NET vs Codex .NET](claude-vs-codex-dotnet.zh-TW.md)。[Codex .NET 與官方 SDK 的對照](https://github.com/pamis-wang/codex-agent-sdk-dotnet/blob/main/docs/comparison-with-official-sdks.zh-TW.md)在 codex-agent-sdk-dotnet repo。
 
 ## 重點
 
