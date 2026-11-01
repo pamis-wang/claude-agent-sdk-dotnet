@@ -8,6 +8,7 @@
     <File Path="LICENSE" />
     <File Path="NOTICE" />
     <File Path="README.md" />
+    <File Path="README.zh-TW.md" />
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/PamisWang.ClaudeAgentSdk/PamisWang.ClaudeAgentSdk.csproj" />
