@@ -65,6 +65,13 @@ public sealed class ClaudeAgentOptions
     public Action<string>? StandardErrorCallback { get; init; }
 
     /// <summary>
+    /// 這個套件自己的警告，例如 Claude Code 的版本低於支援的最低版本。只是提醒，不會中斷連線。
+    /// 有指定時，連線前會先執行一次 <c>claude -v</c> 檢查版本；環境變數 <c>CLAUDE_AGENT_SDK_SKIP_VERSION_CHECK</c> 設成任何值就不檢查。
+    /// Python SDK 沒有這個選項，警告寫進 <c>logging</c>。
+    /// </summary>
+    public Action<string>? WarningCallback { get; init; }
+
+    /// <summary>
     /// 單一則訊息的大小上限（位元組）。超過就丟出 <see cref="CliJsonDecodeException"/>，避免異常的輸出吃光記憶體。
     /// </summary>
     public int MaxBufferSize { get; init; } = 1024 * 1024;

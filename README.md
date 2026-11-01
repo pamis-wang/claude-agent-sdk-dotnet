@@ -117,6 +117,8 @@ await client.ApplyFlagSettingsAsync(new JsonObject { ["effortLevel"] = "max" });
 - .NET 10
 - 已安裝 Claude Code CLI。Windows 請用原生安裝的 `claude.exe`，不支援 npm 的 `claude.cmd`（批次檔會讓 cmd.exe 重新解析參數，有指令注入風險）。
 - Claude Code CLI installed. On Windows, use the native `claude.exe`; the npm `claude.cmd` wrapper is not supported, because cmd.exe re-parses the arguments of batch files, which allows command injection.
+- CLI 最低版本 2.0.0，跟 Python SDK 一樣。指定 `WarningCallback` 時，連線前會執行 `claude -v`，版本太舊就透過它警告，但不會中斷連線；環境變數 `CLAUDE_AGENT_SDK_SKIP_VERSION_CHECK` 設成任何值就不檢查。
+  The minimum CLI version is 2.0.0, as in the Python SDK. With `WarningCallback` set, the SDK runs `claude -v` before connecting and warns through it when the CLI is older, without failing the connection; set `CLAUDE_AGENT_SDK_SKIP_VERSION_CHECK` to any value to skip the check.
 
 ## 授權 / License
 

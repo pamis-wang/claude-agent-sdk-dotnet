@@ -1,5 +1,13 @@
 # Changelog
 
+## 未發佈
+
+- `ClaudeAgentOptions.WarningCallback`：這個套件自己的警告。指定時連線前會執行 `claude -v`，
+  版本低於 2.0.0 就警告，不中斷連線；對應 Python SDK 的 `_check_claude_version`，
+  一樣可以用環境變數 `CLAUDE_AGENT_SDK_SKIP_VERSION_CHECK` 跳過。Python SDK 把警告寫進 `logging`，沒有這個選項。
+- `ResultMessage.Result`、`IsError` 的說明補上 API 錯誤的情況：例如沒登入時 `Subtype` 仍是 `success`，
+  `IsError` 是 `true`，`Result` 是錯誤訊息；錯誤的種類（例如 `authentication_failed`）見 `AssistantMessage.Error`。
+
 ## 0.1.0-preview.4（2026-10-31）
 
 - **不相容變更**：`ClaudeAgentOptions` 的屬性改成 .NET 慣用的名稱，行為不變：`Cwd` → `WorkingDirectory`、
