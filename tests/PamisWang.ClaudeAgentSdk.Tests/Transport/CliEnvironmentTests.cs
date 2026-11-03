@@ -107,6 +107,35 @@ public sealed class CliEnvironmentTests
         Assert.Equal("/elsewhere", env["PWD"]);
     }
 
+    [Fact]
+    public void Apply_FileCheckpointingAndPreviewFormat_WinOverCallerEnv()
+    {
+        var options = new ClaudeAgentOptions
+        {
+            EnableFileCheckpointing = true,
+            AskUserQuestionPreviewFormat = "html",
+            EnvironmentVariables = new Dictionary<string, string>
+            {
+                ["CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING"] = "false",
+                ["CLAUDE_CODE_QUESTION_PREVIEW_FORMAT"] = "markdown",
+            },
+        };
+
+        var env = Apply(options);
+
+        Assert.Equal("true", env["CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING"]);
+        Assert.Equal("html", env["CLAUDE_CODE_QUESTION_PREVIEW_FORMAT"]);
+    }
+
+    [Fact]
+    public void Apply_WithoutCheckpointingOrPreviewFormat_LeavesThemUnset()
+    {
+        var env = Apply(new ClaudeAgentOptions());
+
+        Assert.False(env.ContainsKey("CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING"));
+        Assert.False(env.ContainsKey("CLAUDE_CODE_QUESTION_PREVIEW_FORMAT"));
+    }
+
     private static Dictionary<string, string?> Apply(ClaudeAgentOptions options, Dictionary<string, string?>? inherited = null)
     {
         var env = inherited ?? [];

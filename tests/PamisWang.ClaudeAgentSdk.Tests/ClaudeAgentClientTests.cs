@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using PamisWang.ClaudeAgentSdk.Mcp;
 using PamisWang.ClaudeAgentSdk.Messages;
 using PamisWang.ClaudeAgentSdk.Permissions;
 using PamisWang.ClaudeAgentSdk.Tests.Protocol;
@@ -202,6 +203,134 @@ public sealed class ClaudeAgentClientTests : IDisposable
         Assert.Equal(JsonValueKind.Null, before.Raw.GetProperty("apiUsage").ValueKind);
         Assert.Equal(JsonValueKind.Object, after.Raw.GetProperty("apiUsage").ValueKind);
         Assert.True(after.TotalTokens > before.TotalTokens);
+    }
+
+    [Fact]
+    public async Task SetPermissionModeAsync_RecordedSwitch_SkipsPermissionPromptAndReturnsMode()
+    {
+        var fixture = ProtocolFixture.Load("set_permission_mode");
+        var asked = 0;
+        var options = new ClaudeAgentOptions
+        {
+            CanUseTool = (_, _) =>
+            {
+                Interlocked.Increment(ref asked);
+                return Task.FromResult<PermissionResult>(new PermissionResultDeny("不該問"));
+            },
+        };
+        await using var client = new ClaudeAgentClient(options, new ReplayTransport(fixture));
+        await client.ConnectAsync();
+
+        var acceptEdits = await client.SetPermissionModeAsync(PermissionMode.AcceptEdits);
+        await client.SendAsync(fixture.UserPrompts[0]);
+        var messages = await CollectAsync(client.ReceiveResponseAsync());
+        var back = await client.SetPermissionModeAsync(PermissionMode.Default);
+
+        Assert.Equal(PermissionMode.AcceptEdits, acceptEdits);
+        Assert.Equal(PermissionMode.Default, back);
+        // acceptEdits 下 Write 直接通過，沒有經過權限回呼
+        Assert.Equal(0, asked);
+        Assert.Contains(messages.OfType<AssistantMessage>().SelectMany(m => m.Content).OfType<ToolUseBlock>(), tool => tool.Name == "Write");
+        Assert.False(messages.OfType<ResultMessage>().Single().IsError);
+    }
+
+    [Fact]
+    public async Task Agents_RecordedSubagentRun_SendsDefinitionAndYieldsTaskMessages()
+    {
+        var fixture = ProtocolFixture.Load("subagent_task");
+        // 重播會比對 initialize：定義要跟 Python SDK 送出的一樣
+        var options = new ClaudeAgentOptions
+        {
+            Agents = new Dictionary<string, AgentDefinition>
+            {
+                ["echoer"] = new("Repeats the given word back. Use when asked to echo a word.", "You repeat the word you are given, nothing else.")
+                {
+                    Tools = [],
+                    Model = "haiku",
+                },
+            },
+        };
+        await using var client = new ClaudeAgentClient(options, new ReplayTransport(fixture));
+        await client.ConnectAsync();
+
+        await client.SendAsync(fixture.UserPrompts[0]);
+        var messages = await CollectAsync(client.ReceiveResponseAsync());
+
+        var started = messages.OfType<TaskStartedMessage>().Single();
+        Assert.Equal("echoer", started.SubagentType);
+        Assert.True(messages.OfType<TaskUpdatedMessage>().Single(m => m.TaskId == started.TaskId).Patch.IsTerminal);
+        Assert.Equal("completed", messages.OfType<TaskNotificationMessage>().Single().Status);
+        Assert.Empty(messages.OfType<BackgroundTasksChangedMessage>().Last().Tasks);
+    }
+
+    [Fact]
+    public async Task McpMethods_RecordedStatusToggleAndReconnect_ParseStatusAndSurfaceCliError()
+    {
+        var fixture = ProtocolFixture.Load("mcp_status");
+        await using var client = new ClaudeAgentClient(new ClaudeAgentOptions(), new ReplayTransport(fixture));
+        await client.ConnectAsync();
+
+        var before = await client.GetMcpStatusAsync();
+        await client.ToggleMcpServerAsync("ghost", enabled: false);
+        var after = await client.GetMcpStatusAsync();
+        var error = await Assert.ThrowsAsync<ClaudeAgentException>(() => client.ReconnectMcpServerAsync("ghost"));
+
+        var ghost = before.Single();
+        Assert.Equal("ghost", ghost.Name);
+        Assert.Equal("pending", ghost.Status);
+        Assert.Equal("nonexistent-mcp-server-for-fixtures", ghost.Config!.Value.GetProperty("command").GetString());
+        Assert.Equal("disabled", after.Single().Status);
+        Assert.Contains("disabled", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RewindFilesAsync_RecordedCheckpoint_PreviewsThenRestores()
+    {
+        var fixture = ProtocolFixture.Load("rewind_files");
+        var options = new ClaudeAgentOptions
+        {
+            CanUseTool = (_, _) => Task.FromResult<PermissionResult>(new PermissionResultAllow()),
+        };
+        await using var client = new ClaudeAgentClient(options, new ReplayTransport(fixture));
+        await client.ConnectAsync();
+
+        await client.SendAsync(fixture.UserPrompts[0]);
+        var messages = await CollectAsync(client.ReceiveResponseAsync());
+        // replay-user-messages 送回來的第一則使用者訊息就是剛才說的那句，帶著 uuid
+        var userMessageId = messages.OfType<UserMessage>().First().Uuid!;
+        var preview = await client.RewindFilesAsync(userMessageId, dryRun: true);
+        var restored = await client.RewindFilesAsync(userMessageId);
+
+        Assert.True(preview.CanRewind);
+        Assert.EndsWith("hello.txt", preview.FilesChanged.Single(), StringComparison.Ordinal);
+        Assert.Equal(0, preview.Insertions);
+        Assert.Equal(1, preview.Deletions);
+        Assert.Null(preview.SkippedLinks);
+        Assert.True(restored.CanRewind);
+        Assert.Equal(0, restored.SkippedLinks);
+    }
+
+    [Fact]
+    public async Task TypeScriptOnlyRequests_Recorded_AreAcceptedByCli()
+    {
+        var fixture = ProtocolFixture.Load("ts_control_requests");
+        await using var client = new ClaudeAgentClient(new ClaudeAgentOptions(), new ReplayTransport(fixture));
+        await client.ConnectAsync();
+
+        var set = await client.SetMcpServersAsync(new Dictionary<string, McpServerConfig> { ["ghost"] = new McpHttpServerConfig("http://127.0.0.1:9/mcp") });
+        var pinned = await client.SetMcpPermissionModeOverrideAsync("ghost", PermissionMode.Default);
+        var cleared = await client.SetMcpPermissionModeOverrideAsync("ghost", mode: null);
+        var all = await client.BackgroundTasksAsync();
+        var one = await client.BackgroundTasksAsync("toolu_nonexistent");
+        await client.StopTaskAsync("nonexistent");
+
+        Assert.Equal(["ghost"], set.Added);
+        Assert.Empty(set.Removed);
+        Assert.True(set.Errors.ContainsKey("ghost"));
+        Assert.Null(pinned);
+        Assert.Null(cleared);
+        Assert.True(all);
+        Assert.False(one);
     }
 
     [Fact]
