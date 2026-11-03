@@ -28,6 +28,17 @@ internal static class CliEnvironment
         // Python SDK 一律設成自己的版本，不讓呼叫端改；這裡報對照的 Python SDK 版本，跟錄協定樣本時一樣
         environment["CLAUDE_AGENT_SDK_VERSION"] = SdkInfo.PythonSdkVersion;
 
+        // 這兩個是選項，跟 Python 與 TS SDK 一樣在呼叫端的環境變數之後設，選項優先
+        if (options.EnableFileCheckpointing)
+        {
+            environment["CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING"] = "true";
+        }
+
+        if (options.AskUserQuestionPreviewFormat is { } previewFormat)
+        {
+            environment["CLAUDE_CODE_QUESTION_PREVIEW_FORMAT"] = previewFormat;
+        }
+
         // CLI 會把它放進 User-Agent 的 client-app，表明實際上是哪個用戶端；應用程式可以換成自己的名字
         if (!ContainsKeyIgnoreCase(environment, "CLAUDE_AGENT_SDK_CLIENT_APP"))
         {

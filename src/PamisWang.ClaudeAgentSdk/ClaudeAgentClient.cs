@@ -2,7 +2,9 @@ using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using PamisWang.ClaudeAgentSdk.Mcp;
 using PamisWang.ClaudeAgentSdk.Messages;
+using PamisWang.ClaudeAgentSdk.Permissions;
 using PamisWang.ClaudeAgentSdk.Protocol;
 using PamisWang.ClaudeAgentSdk.Transport;
 
@@ -84,9 +86,13 @@ public sealed class ClaudeAgentClient : IAsyncDisposable
     /// <exception cref="TimeoutException">CLI 遲遲沒有回應初始化。</exception>
     /// <exception cref="InvalidOperationException">已經連線過。</exception>
     /// <exception cref="ArgumentException">
-    /// 選項組不出 CLI 參數：Windows 上的 <see cref="ClaudeAgentOptions.ResumeSessionId"/> 含有 cmd.exe 的特殊字元，
+    /// 選項組不出 CLI 參數：Windows 上的 <see cref="ClaudeAgentOptions.ResumeSessionId"/>、<see cref="ClaudeAgentOptions.SessionId"/>、
+    /// <see cref="ClaudeAgentOptions.ResumeSessionAt"/> 或 <see cref="ClaudeAgentOptions.ResumeDropsTurn"/> 含有 cmd.exe 的特殊字元，
     /// <see cref="ClaudeAgentOptions.ExtraArguments"/> 的旗標名稱不能用，
-    /// 或 <see cref="ClaudeAgentOptions.MaxTurns"/>、<see cref="ClaudeAgentOptions.MaxBudgetUsd"/> 不大於 0（<see cref="ArgumentOutOfRangeException"/>）。
+    /// <see cref="ClaudeAgentOptions.MaxTurns"/>、<see cref="ClaudeAgentOptions.MaxBudgetUsd"/>、<see cref="ClaudeAgentOptions.TaskBudget"/> 不大於 0（<see cref="ArgumentOutOfRangeException"/>），
+    /// 或選項互相衝突：例如 <see cref="ClaudeAgentOptions.ContinueConversation"/> 與 <see cref="ClaudeAgentOptions.ResumeSessionId"/> 同時指定、
+    /// <see cref="ClaudeAgentOptions.ForkSession"/> 沒有要接續的 session、<see cref="ClaudeAgentOptions.CanUseTool"/> 與 <see cref="ClaudeAgentOptions.PermissionPromptToolName"/> 同時設定，
+    /// 或 <see cref="ClaudeAgentOptions.Settings"/>、<see cref="ClaudeAgentOptions.SettingsFile"/>、<see cref="ClaudeAgentOptions.Sandbox"/> 互相重疊。
     /// </exception>
     public async Task ConnectAsync(CancellationToken cancellationToken = default)
     {
@@ -101,7 +107,11 @@ public sealed class ClaudeAgentClient : IAsyncDisposable
             _state = ClientState.Connecting;
         }
 
-        var protocol = new ControlProtocol(_transport, _options.CanUseTool);
+        var protocol = new ControlProtocol(_transport, _options.CanUseTool)
+        {
+            InitializeOptions = _options,
+            VerbatimPrompts = _options.VerbatimPrompts,
+        };
         try
         {
             await _transport.ConnectAsync(cancellationToken).ConfigureAwait(false);
@@ -219,6 +229,164 @@ public sealed class ClaudeAgentClient : IAsyncDisposable
     {
         var response = await RequireProtocol().GetContextUsageAsync(detail, cancellationToken).ConfigureAwait(false);
         return MessageParser.ParseContextUsage(response);
+    }
+
+    /// <summary>
+    /// 換權限模式，之後的工具呼叫照新的模式判斷，不用重新連線。對應 Python 的 <c>set_permission_mode()</c>。
+    /// 回傳 CLI 回報目前生效的模式，CLI 沒回報時是 <see langword="null"/>；Python 與 TypeScript SDK 不回傳這個值。
+    /// 要切到 <see cref="PermissionMode.BypassPermissions"/>，開對話時要設定 <see cref="ClaudeAgentOptions.AllowDangerouslySkipPermissions"/>。
+    /// </summary>
+    /// <exception cref="ClaudeAgentException">CLI 拒絕，例如這個帳號不能用自動模式。</exception>
+    public async Task<PermissionMode?> SetPermissionModeAsync(PermissionMode mode, CancellationToken cancellationToken = default)
+    {
+        var current = await RequireProtocol().SetPermissionModeAsync(mode.Value, cancellationToken).ConfigureAwait(false);
+        return current is null ? null : new PermissionMode(current);
+    }
+
+    /// <summary>
+    /// 把檔案還原到某則使用者訊息時的樣子。要開啟 <see cref="ClaudeAgentOptions.EnableFileCheckpointing"/>；
+    /// 使用者訊息的 UUID 從 <see cref="UserMessage"/> 的 <see cref="ClaudeMessage.Uuid"/> 讀，要收到這些訊息，
+    /// 用 <see cref="ClaudeAgentOptions.ExtraArguments"/> 帶 <c>replay-user-messages</c>。對應 Python 的 <c>rewind_files()</c>。
+    /// <paramref name="dryRun"/> 是 <see langword="true"/> 時只回報會改哪些檔案，不真的還原；Python SDK 沒有這個參數，對應 TypeScript SDK 的 <c>dryRun</c>。
+    /// </summary>
+    /// <exception cref="MessageParseException">回應缺少必要欄位或格式不對。</exception>
+    public async Task<RewindFilesResult> RewindFilesAsync(
+        string userMessageId,
+        bool dryRun = false,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(userMessageId);
+        var response = await RequireProtocol().RewindFilesAsync(userMessageId, dryRun, cancellationToken).ConfigureAwait(false);
+        return MessageParser.ParseRewindFilesResult(response);
+    }
+
+    /// <summary>
+    /// 停止一個背景任務，任務 ID 從 <see cref="TaskStartedMessage.TaskId"/> 讀。對應 Python 的 <c>stop_task()</c>。
+    /// 停止後 CLI 會送來狀態是結束的 <see cref="TaskUpdatedMessage"/>（<c>killed</c>），可能還有一則 <see cref="TaskNotificationMessage"/>（<c>stopped</c>）。
+    /// </summary>
+    public Task StopTaskAsync(string taskId, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(taskId);
+        return RequireProtocol().StopTaskAsync(taskId, cancellationToken);
+    }
+
+    /// <summary>
+    /// 把前景的任務（Bash 指令與 subagent）移到背景，跟在終端機按 Ctrl+B 一樣：工具呼叫馬上回報「在背景執行」，這一輪繼續，任務做完時送 <see cref="TaskNotificationMessage"/>。
+    /// <paramref name="toolUseId"/> 指定只移那個工具呼叫啟動的任務，回傳有沒有找到；不指定時移全部，回傳 <see langword="true"/>。
+    /// Python SDK 沒有這個方法，對應 TypeScript SDK 的 <c>backgroundTasks()</c>。
+    /// </summary>
+    public async Task<bool> BackgroundTasksAsync(string? toolUseId = null, CancellationToken cancellationToken = default)
+    {
+        var response = await RequireProtocol().BackgroundTasksAsync(toolUseId, cancellationToken).ConfigureAwait(false);
+        return !response.TryGetProperty("backgrounded", out var backgrounded) || backgrounded.ValueKind != JsonValueKind.False;
+    }
+
+    /// <summary>查所有 MCP server 的連線狀態。對應 Python 的 <c>get_mcp_status()</c>（Python 回傳包著清單的物件，這裡直接回傳清單）。</summary>
+    /// <exception cref="MessageParseException">回應缺少必要欄位或格式不對。</exception>
+    public async Task<IReadOnlyList<McpServerStatus>> GetMcpStatusAsync(CancellationToken cancellationToken = default)
+    {
+        var response = await RequireProtocol().GetMcpStatusAsync(cancellationToken).ConfigureAwait(false);
+        return MessageParser.ParseMcpStatus(response);
+    }
+
+    /// <summary>重新連線一個斷線或連線失敗的 MCP server。對應 Python 的 <c>reconnect_mcp_server()</c>。</summary>
+    /// <exception cref="ClaudeAgentException">重新連線失敗。</exception>
+    public Task ReconnectMcpServerAsync(string serverName, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(serverName);
+        return RequireProtocol().ReconnectMcpServerAsync(serverName, cancellationToken);
+    }
+
+    /// <summary>
+    /// 開啟或關閉一個 MCP server：關閉時斷線並移除它的工具，開啟時重新連線、工具也回來。對應 Python 的 <c>toggle_mcp_server()</c>。
+    /// </summary>
+    /// <exception cref="ClaudeAgentException">CLI 拒絕，例如沒有這個 server。</exception>
+    public Task ToggleMcpServerAsync(string serverName, bool enabled, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(serverName);
+        return RequireProtocol().ToggleMcpServerAsync(serverName, enabled, cancellationToken);
+    }
+
+    /// <summary>
+    /// 整組換掉對話中動態加入的 MCP server：不在 <paramref name="servers"/> 裡的會移除，新的會連線。
+    /// 開對話時的 <see cref="ClaudeAgentOptions.McpServers"/> 與設定檔裡的不受影響。
+    /// Python SDK 沒有這個方法，對應 TypeScript SDK 的 <c>setMcpServers()</c>。
+    /// </summary>
+    /// <exception cref="MessageParseException">回應缺少必要欄位或格式不對。</exception>
+    public async Task<McpSetServersResult> SetMcpServersAsync(
+        IReadOnlyDictionary<string, McpServerConfig> servers,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(servers);
+        var response = await RequireProtocol().SetMcpServersAsync(servers, cancellationToken).ConfigureAwait(false);
+        return MessageParser.ParseMcpSetServersResult(response);
+    }
+
+    /// <summary>
+    /// 從已連線的 MCP server 讀一個 MCP Apps 的 UI 資源（<paramref name="uri"/> 必須是 <c>ui://</c>，通常是工具宣告的 <c>_meta.ui.resourceUri</c>）。
+    /// 不會觸發模型。內容來自第三方（通常是 HTML），顯示時要放在沙箱裡。
+    /// Python SDK 沒有這個方法，對應 TypeScript SDK 的 <c>readMcpResource()</c>。
+    /// </summary>
+    /// <exception cref="ClaudeAgentException">CLI 拒絕，例如不是 <c>ui://</c>、沒有這個 server，或 server 沒連上（先用 <see cref="ReconnectMcpServerAsync"/>）。</exception>
+    /// <exception cref="MessageParseException">回應缺少必要欄位或格式不對。</exception>
+    public async Task<IReadOnlyList<McpResourceContent>> ReadMcpResourceAsync(
+        string serverName,
+        string uri,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(serverName);
+        ArgumentException.ThrowIfNullOrEmpty(uri);
+        var response = await RequireProtocol().ReadMcpResourceAsync(serverName, uri, cancellationToken).ConfigureAwait(false);
+        return MessageParser.ParseMcpResourceContents(response);
+    }
+
+    /// <summary>
+    /// 固定一個 MCP server 的工具要用哪種權限模式判斷，<see langword="null"/> 清掉。只在這個 session 的模式原本會自動允許時才生效，
+    /// 例如在 <see cref="PermissionMode.BypassPermissions"/> 下仍讓某個 server 的工具經過詢問或自動模式的判斷。
+    /// CLI 只接受 <see cref="PermissionMode.Default"/>、<see cref="PermissionMode.Auto"/> 與 <see langword="null"/>，只能變得更嚴格。
+    /// 回傳 CLI 的提醒，沒有時是 <see langword="null"/>。Python SDK 沒有這個方法，對應 TypeScript SDK 的 <c>setMcpPermissionModeOverride()</c>；
+    /// CLI 把這個請求標成內部使用，之後可能改變。
+    /// </summary>
+    /// <exception cref="ClaudeAgentException">CLI 拒絕，例如給了其他模式。</exception>
+    public async Task<string?> SetMcpPermissionModeOverrideAsync(
+        string serverName,
+        PermissionMode? mode,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(serverName);
+        var response = await RequireProtocol()
+            .SetMcpPermissionModeOverrideAsync(serverName, mode?.Value, cancellationToken)
+            .ConfigureAwait(false);
+        return response.TryGetProperty("warning", out var warning) && warning.ValueKind == JsonValueKind.String ? warning.GetString() : null;
+    }
+
+    /// <summary>
+    /// 從磁碟重新載入外掛，回傳重新載入後的指令、subagent、外掛與 MCP server。
+    /// <paramref name="holdOnCacheImpact"/> 是 <see langword="true"/> 時，如果會改變工具清單、讓提示詞快取失效就不套用（<see cref="ReloadPluginsResult.Held"/>）；
+    /// <paramref name="addPlugins"/> 是同時要多載入的外掛，已經載入的不會移除。
+    /// Python SDK 沒有這個方法，對應 TypeScript SDK 的 <c>reloadPlugins()</c>。
+    /// </summary>
+    /// <exception cref="MessageParseException">回應缺少必要欄位或格式不對。</exception>
+    public async Task<ReloadPluginsResult> ReloadPluginsAsync(
+        bool holdOnCacheImpact = false,
+        IReadOnlyList<LocalPlugin>? addPlugins = null,
+        CancellationToken cancellationToken = default)
+    {
+        var response = await RequireProtocol()
+            .ReloadPluginsAsync(holdOnCacheImpact, addPlugins ?? [], cancellationToken)
+            .ConfigureAwait(false);
+        return MessageParser.ParseReloadPluginsResult(response);
+    }
+
+    /// <summary>
+    /// 從磁碟重新載入 skill（例如對話中途新增了 SKILL.md），回傳重新載入後的 skill。
+    /// Python SDK 沒有這個方法，對應 TypeScript SDK 的 <c>reloadSkills()</c>。
+    /// </summary>
+    /// <exception cref="MessageParseException">回應缺少必要欄位或格式不對。</exception>
+    public async Task<IReadOnlyList<SlashCommand>> ReloadSkillsAsync(CancellationToken cancellationToken = default)
+    {
+        var response = await RequireProtocol().ReloadSkillsAsync(cancellationToken).ConfigureAwait(false);
+        return MessageParser.ParseReloadSkillsResult(response);
     }
 
     /// <summary>關閉：取消等待中的權限詢問、關閉 stdin 讓 CLI 寫完 session 後結束，逾時才強制結束。</summary>

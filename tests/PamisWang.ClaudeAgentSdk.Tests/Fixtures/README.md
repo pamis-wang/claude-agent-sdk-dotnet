@@ -31,6 +31,11 @@ Claude Code CLI 的 stream-json 收發紀錄，給單元測試用假的 transpor
 | `set_model.jsonl` | 對話中途換模型（`set_model`）再說一句，最後換回預設（`model` 是 `null`） |
 | `apply_flag_settings.jsonl` | 對話中途改思考深度（`apply_flag_settings`）再說一句，最後清掉；Python SDK 沒有公開的方法，腳本直接用它內部送 control request 的函式 |
 | `context_usage.jsonl` | 查 context 用量（`get_context_usage`）：還沒說話時不帶 `detail`，說一句之後帶 `detail: summary`；Python SDK 的方法沒有 `detail` 參數，第二次直接送 control request |
+| `set_permission_mode.jsonl` | 對話中途換成 `acceptEdits`（`set_permission_mode`），Write 不再經過權限回呼，最後換回 `default` |
+| `subagent_task.jsonl` | 在 initialize 的 `agents` 定義 subagent，交辦工作時的任務訊息：`background_tasks_changed`、`task_started`、`task_updated`、`task_notification` |
+| `mcp_status.jsonl` | 啟動不了的 stdio MCP server：查狀態（`mcp_status`）、關閉（`mcp_toggle`）再查，重新連線（`mcp_reconnect`）被拒絕 |
+| `rewind_files.jsonl` | 開啟檔案檢查點並帶 `--replay-user-messages`，寫檔後預覽（`rewind_files` 帶 `dry_run`）再真的還原；Python SDK 的方法沒有 `dry_run`，預覽直接送 control request |
+| `ts_control_requests.jsonl` | TypeScript SDK 才有的 control request：`mcp_set_servers`、`set_mcp_permission_mode_override`（固定再清掉）、`background_tasks`（全部與指定一個），加上 `stop_task`；Python SDK 沒有這些方法，直接送 control request |
 
 ## 錄製條件
 

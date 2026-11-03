@@ -4,13 +4,15 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Threading.Channels;
+using PamisWang.ClaudeAgentSdk.Mcp;
 using PamisWang.ClaudeAgentSdk.Permissions;
 using PamisWang.ClaudeAgentSdk.Transport;
 
 namespace PamisWang.ClaudeAgentSdk.Protocol;
 
 /// <summary>
-/// 在 transport 上跑 control 協定：初始化握手、讀取迴圈分流、回覆 CLI 的權限詢問、送出中斷、換模型、套用設定與查 context 用量。
+/// 在 transport 上跑 control 協定：初始化握手、讀取迴圈分流、回覆 CLI 的權限詢問，以及 SDK 送出的各種 control request
+/// （中斷、換模型與權限模式、套用設定、查 context 用量、背景任務、MCP server、外掛與 skill、還原檔案）。
 /// 對應 Python SDK 的 <c>Query</c> 裡互動式 client 用到的部分；
 /// 一次性 <c>query()</c> 用來判斷何時關 stdin 的 run 生命週期（session state、上限計時）不在這裡，互動式的 stdin 只在關閉時才關。
 /// </summary>
@@ -52,12 +54,24 @@ internal sealed class ControlProtocol : IAsyncDisposable
     /// <summary>關閉時等權限回呼收尾的時間上限。測試會調短。</summary>
     internal TimeSpan HandlerShutdownTimeout { get; init; } = TimeSpan.FromSeconds(5);
 
+    /// <summary>initialize 要帶的選項（subagent、skill 等）；<see langword="null"/> 時只送 <c>hooks: null</c>，跟 Python SDK 沒有設定時一樣。</summary>
+    internal ClaudeAgentOptions? InitializeOptions { get; init; }
+
+    /// <summary>使用者訊息照原文送（<see cref="ClaudeAgentOptions.VerbatimPrompts"/>）。</summary>
+    internal bool VerbatimPrompts { get; init; }
+
     /// <summary>開始讀取迴圈；要在送出任何 control request 之前呼叫。</summary>
     public void Start() => _readLoop ??= Task.Run(ReadLoopAsync);
 
     /// <summary>初始化握手，回傳 CLI 的回應（指令、模型、帳號等資訊）。CLI 回應前不要送使用者訊息。</summary>
     public Task<JsonElement> InitializeAsync(TimeSpan timeout, CancellationToken cancellationToken = default) =>
-        SendControlRequestAsync("initialize", writer => writer.WriteNull("hooks"), timeout, cancellationToken);
+        SendControlRequestAsync(
+            "initialize",
+            InitializeOptions is { } options
+                ? writer => ControlMessages.WriteInitializeFields(writer, options)
+                : writer => writer.WriteNull("hooks"),
+            timeout,
+            cancellationToken);
 
     /// <summary>中斷這一輪；對話還在，之後可以接著說。</summary>
     public Task InterruptAsync(CancellationToken cancellationToken = default) =>
@@ -101,9 +115,144 @@ internal sealed class ControlProtocol : IAsyncDisposable
             DefaultRequestTimeout,
             cancellationToken);
 
+    /// <summary>換權限模式。回傳 CLI 回報目前生效的模式，沒回報時是 <see langword="null"/>。</summary>
+    public async Task<string?> SetPermissionModeAsync(string mode, CancellationToken cancellationToken = default)
+    {
+        var response = await SendControlRequestAsync(
+                "set_permission_mode",
+                writer => writer.WriteString("mode", mode),
+                DefaultRequestTimeout,
+                cancellationToken)
+            .ConfigureAwait(false);
+        return GetString(response, "mode");
+    }
+
+    /// <summary>把檔案還原到某則使用者訊息時的樣子；<paramref name="dryRun"/> 只預覽。不預覽時不帶 <c>dry_run</c>，跟 Python SDK 送的一樣。</summary>
+    public Task<JsonElement> RewindFilesAsync(string userMessageId, bool dryRun, CancellationToken cancellationToken = default) =>
+        SendControlRequestAsync(
+            "rewind_files",
+            writer =>
+            {
+                writer.WriteString("user_message_id", userMessageId);
+                if (dryRun)
+                {
+                    writer.WriteBoolean("dry_run", true);
+                }
+            },
+            DefaultRequestTimeout,
+            cancellationToken);
+
+    /// <summary>停止一個背景任務。</summary>
+    public Task StopTaskAsync(string taskId, CancellationToken cancellationToken = default) =>
+        SendControlRequestAsync("stop_task", writer => writer.WriteString("task_id", taskId), DefaultRequestTimeout, cancellationToken);
+
+    /// <summary>把前景的任務移到背景；<paramref name="toolUseId"/> 是 <see langword="null"/> 時移全部，跟 TypeScript SDK 一樣不帶 <c>tool_use_id</c>。</summary>
+    public Task<JsonElement> BackgroundTasksAsync(string? toolUseId, CancellationToken cancellationToken = default) =>
+        SendControlRequestAsync(
+            "background_tasks",
+            toolUseId is null ? null : writer => writer.WriteString("tool_use_id", toolUseId),
+            DefaultRequestTimeout,
+            cancellationToken);
+
+    /// <summary>查所有 MCP server 的連線狀態。</summary>
+    public Task<JsonElement> GetMcpStatusAsync(CancellationToken cancellationToken = default) =>
+        SendControlRequestAsync("mcp_status", writeFields: null, DefaultRequestTimeout, cancellationToken);
+
+    /// <summary>重新連線一個斷線或連線失敗的 MCP server。</summary>
+    public Task ReconnectMcpServerAsync(string serverName, CancellationToken cancellationToken = default) =>
+        SendControlRequestAsync("mcp_reconnect", writer => writer.WriteString("serverName", serverName), DefaultRequestTimeout, cancellationToken);
+
+    /// <summary>開啟或關閉一個 MCP server。</summary>
+    public Task ToggleMcpServerAsync(string serverName, bool enabled, CancellationToken cancellationToken = default) =>
+        SendControlRequestAsync(
+            "mcp_toggle",
+            writer =>
+            {
+                writer.WriteString("serverName", serverName);
+                writer.WriteBoolean("enabled", enabled);
+            },
+            DefaultRequestTimeout,
+            cancellationToken);
+
+    /// <summary>整組換掉對話中動態加入的 MCP server。</summary>
+    public Task<JsonElement> SetMcpServersAsync(IReadOnlyDictionary<string, McpServerConfig> servers, CancellationToken cancellationToken = default) =>
+        SendControlRequestAsync(
+            "mcp_set_servers",
+            writer =>
+            {
+                writer.WriteStartObject("servers");
+                foreach (var (name, server) in servers)
+                {
+                    writer.WritePropertyName(name);
+                    server.WriteTo(writer);
+                }
+
+                writer.WriteEndObject();
+            },
+            DefaultRequestTimeout,
+            cancellationToken);
+
+    /// <summary>從 MCP server 讀一個 <c>ui://</c> 資源。</summary>
+    public Task<JsonElement> ReadMcpResourceAsync(string serverName, string uri, CancellationToken cancellationToken = default) =>
+        SendControlRequestAsync(
+            "mcp_read_resource",
+            writer =>
+            {
+                writer.WriteString("serverName", serverName);
+                writer.WriteString("uri", uri);
+            },
+            DefaultRequestTimeout,
+            cancellationToken);
+
+    /// <summary>固定（或用 <see langword="null"/> 清掉）一個 MCP server 的工具權限模式。</summary>
+    public Task<JsonElement> SetMcpPermissionModeOverrideAsync(string serverName, string? mode, CancellationToken cancellationToken = default) =>
+        SendControlRequestAsync(
+            "set_mcp_permission_mode_override",
+            writer =>
+            {
+                writer.WriteString("serverName", serverName);
+                writer.WriteString("mode", mode);
+            },
+            DefaultRequestTimeout,
+            cancellationToken);
+
+    /// <summary>從磁碟重新載入外掛；欄位只在有指定時才帶，跟 TypeScript SDK 一樣。</summary>
+    public Task<JsonElement> ReloadPluginsAsync(
+        bool holdOnCacheImpact,
+        IReadOnlyList<LocalPlugin> addPlugins,
+        CancellationToken cancellationToken = default) =>
+        SendControlRequestAsync(
+            "reload_plugins",
+            !holdOnCacheImpact && addPlugins.Count == 0
+                ? null
+                : writer =>
+                {
+                    if (holdOnCacheImpact)
+                    {
+                        writer.WriteBoolean("hold_on_cache_impact", true);
+                    }
+
+                    if (addPlugins.Count > 0)
+                    {
+                        writer.WriteStartArray("add_plugins");
+                        foreach (var plugin in addPlugins)
+                        {
+                            ControlMessages.WritePlugin(writer, plugin);
+                        }
+
+                        writer.WriteEndArray();
+                    }
+                },
+            DefaultRequestTimeout,
+            cancellationToken);
+
+    /// <summary>從磁碟重新載入 skill。</summary>
+    public Task<JsonElement> ReloadSkillsAsync(CancellationToken cancellationToken = default) =>
+        SendControlRequestAsync("reload_skills", writeFields: null, DefaultRequestTimeout, cancellationToken);
+
     /// <summary>送出使用者說的一句話。</summary>
     public Task SendUserMessageAsync(string content, CancellationToken cancellationToken = default) =>
-        _transport.WriteAsync(ControlMessages.UserMessage(content, sessionId: "default"), cancellationToken);
+        _transport.WriteAsync(ControlMessages.UserMessage(content, sessionId: "default", VerbatimPrompts), cancellationToken);
 
     /// <summary>
     /// 讀取 control 協定以外的訊息，直到 CLI 的輸出結束。讀取失敗時丟出原本的例外，例如 <see cref="CliProcessException"/>。

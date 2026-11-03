@@ -1,4 +1,5 @@
 using System.Text.Json;
+using PamisWang.ClaudeAgentSdk.Mcp;
 
 namespace PamisWang.ClaudeAgentSdk.Messages;
 
@@ -25,7 +26,7 @@ internal static class MessageParser
             {
                 "assistant" => ParseAssistant(data),
                 "user" => ParseUser(data),
-                "system" => new SystemMessage { Subtype = RequiredString(data, "subtype") },
+                "system" => ParseSystem(data),
                 "result" => ParseResult(data),
                 "stream_event" => ParseStreamEvent(data),
                 "rate_limit_event" => new RateLimitEvent { Info = ParseRateLimitInfo(Required(data, "rate_limit_info")) },
@@ -95,6 +96,222 @@ internal static class MessageParser
             throw new MessageParseException($"get_context_usage 的回應格式不對：{e.Message}", data, e);
         }
     }
+
+    /// <summary>解析 <c>rewind_files</c> 的回應。</summary>
+    /// <exception cref="MessageParseException">缺少必要欄位或格式不對。</exception>
+    public static RewindFilesResult ParseRewindFilesResult(JsonElement data) =>
+        ParseResponse("rewind_files", data, () => new RewindFilesResult
+        {
+            CanRewind = Required(data, "canRewind").GetBoolean(),
+            Error = OptionalString(data, "error"),
+            FilesChanged = OptionalArray(data, "filesChanged", file => file.GetString()!),
+            Insertions = (int?)OptionalInt64(data, "insertions"),
+            Deletions = (int?)OptionalInt64(data, "deletions"),
+            SkippedLinks = (int?)OptionalInt64(data, "skippedLinks"),
+            Raw = data,
+        });
+
+    /// <summary>解析 <c>mcp_status</c> 的回應，回傳 <c>mcpServers</c> 的每一項。</summary>
+    /// <exception cref="MessageParseException">缺少必要欄位或格式不對。</exception>
+    public static IReadOnlyList<McpServerStatus> ParseMcpStatus(JsonElement data) =>
+        ParseResponse("mcp_status", data, () => ParseMcpServerStatuses(Required(data, "mcpServers")));
+
+    /// <summary>解析 <c>mcp_set_servers</c> 的回應。</summary>
+    /// <exception cref="MessageParseException">缺少必要欄位或格式不對。</exception>
+    public static McpSetServersResult ParseMcpSetServersResult(JsonElement data) =>
+        ParseResponse("mcp_set_servers", data, () => new McpSetServersResult
+        {
+            Added = [.. Required(data, "added").EnumerateArray().Select(name => name.GetString()!)],
+            Removed = [.. Required(data, "removed").EnumerateArray().Select(name => name.GetString()!)],
+            Errors = Required(data, "errors").EnumerateObject().ToDictionary(error => error.Name, error => error.Value.GetString()!),
+            Raw = data,
+        });
+
+    /// <summary>解析 <c>mcp_read_resource</c> 的回應，回傳 <c>contents</c> 的每一項。</summary>
+    /// <exception cref="MessageParseException">缺少必要欄位或格式不對。</exception>
+    public static IReadOnlyList<McpResourceContent> ParseMcpResourceContents(JsonElement data) =>
+        ParseResponse("mcp_read_resource", data, () => (IReadOnlyList<McpResourceContent>)[.. Required(data, "contents").EnumerateArray().Select(content => new McpResourceContent
+        {
+            Uri = RequiredString(content, "uri"),
+            MimeType = OptionalString(content, "mimeType"),
+            Text = OptionalString(content, "text"),
+            Blob = OptionalString(content, "blob"),
+            Raw = content,
+        })]);
+
+    /// <summary>解析 <c>reload_plugins</c> 的回應。</summary>
+    /// <exception cref="MessageParseException">缺少必要欄位或格式不對。</exception>
+    public static ReloadPluginsResult ParseReloadPluginsResult(JsonElement data) =>
+        ParseResponse("reload_plugins", data, () => new ReloadPluginsResult
+        {
+            Commands = ParseSlashCommands(Required(data, "commands")),
+            Agents = [.. Required(data, "agents").EnumerateArray()],
+            Plugins = [.. Required(data, "plugins").EnumerateArray().Select(plugin => new PluginInfo
+            {
+                Name = RequiredString(plugin, "name"),
+                Path = RequiredString(plugin, "path"),
+                Source = OptionalString(plugin, "source"),
+                Version = OptionalString(plugin, "version"),
+            })],
+            McpServers = ParseMcpServerStatuses(Required(data, "mcpServers")),
+            ErrorCount = (int)RequiredInt64(data, "error_count"),
+            Held = Optional(data, "held")?.GetBoolean(),
+            Raw = data,
+        });
+
+    /// <summary>解析 <c>reload_skills</c> 的回應，回傳 <c>skills</c> 的每一項。</summary>
+    /// <exception cref="MessageParseException">缺少必要欄位或格式不對。</exception>
+    public static IReadOnlyList<SlashCommand> ParseReloadSkillsResult(JsonElement data) =>
+        ParseResponse("reload_skills", data, () => ParseSlashCommands(Required(data, "skills")));
+
+    private static T ParseResponse<T>(string subtype, JsonElement data, Func<T> parse)
+    {
+        try
+        {
+            return parse();
+        }
+        catch (Exception e) when (e is FormatException or InvalidOperationException or KeyNotFoundException or ArgumentException)
+        {
+            throw new MessageParseException($"{subtype} 的回應格式不對：{e.Message}", data, e);
+        }
+    }
+
+    private static List<McpServerStatus> ParseMcpServerStatuses(JsonElement servers) =>
+        [.. servers.EnumerateArray().Select(server => new McpServerStatus
+        {
+            Name = RequiredString(server, "name"),
+            Status = RequiredString(server, "status"),
+            ServerInfo = Optional(server, "serverInfo") is { } info
+                ? new McpServerInfo(RequiredString(info, "name"), RequiredString(info, "version"))
+                : null,
+            Error = OptionalString(server, "error"),
+            Scope = OptionalString(server, "scope"),
+            Source = OptionalString(server, "source"),
+            Tools = OptionalArray(server, "tools", ParseMcpServerTool),
+            Config = Optional(server, "config"),
+            Raw = server,
+        })];
+
+    private static McpServerTool ParseMcpServerTool(JsonElement tool)
+    {
+        var annotations = Optional(tool, "annotations");
+        return new McpServerTool
+        {
+            Name = RequiredString(tool, "name"),
+            Description = OptionalString(tool, "description"),
+            IsReadOnly = annotations is { } readOnly ? Optional(readOnly, "readOnly")?.GetBoolean() : null,
+            IsDestructive = annotations is { } destructive ? Optional(destructive, "destructive")?.GetBoolean() : null,
+            IsOpenWorld = annotations is { } openWorld ? Optional(openWorld, "openWorld")?.GetBoolean() : null,
+            Raw = tool,
+        };
+    }
+
+    private static List<SlashCommand> ParseSlashCommands(JsonElement commands) =>
+        [.. commands.EnumerateArray().Select(command => new SlashCommand
+        {
+            Name = RequiredString(command, "name"),
+            Description = RequiredString(command, "description"),
+            ArgumentHint = OptionalString(command, "argumentHint") ?? "",
+            Raw = command,
+        })];
+
+    /// <summary>
+    /// 系統訊息：背景任務的幾種子型別轉成專屬型別，必要欄位跟 Python SDK 一樣；其他的都是 <see cref="SystemMessage"/>。
+    /// </summary>
+    private static SystemMessage ParseSystem(JsonElement data)
+    {
+        var subtype = RequiredString(data, "subtype");
+        switch (subtype)
+        {
+            case "task_started":
+                RequireUuidAndSessionId(data);
+                return new TaskStartedMessage
+                {
+                    Subtype = subtype,
+                    TaskId = RequiredString(data, "task_id"),
+                    Description = RequiredString(data, "description"),
+                    ToolUseId = OptionalString(data, "tool_use_id"),
+                    TaskType = OptionalString(data, "task_type"),
+                    SubagentType = OptionalString(data, "subagent_type"),
+                    IsBackgrounded = Optional(data, "is_backgrounded")?.GetBoolean(),
+                    ParentTaskId = OptionalString(data, "parent_task_id"),
+                    Prompt = OptionalString(data, "prompt"),
+                };
+
+            case "task_progress":
+                RequireUuidAndSessionId(data);
+                return new TaskProgressMessage
+                {
+                    Subtype = subtype,
+                    TaskId = RequiredString(data, "task_id"),
+                    Description = RequiredString(data, "description"),
+                    Usage = ParseTaskUsage(Required(data, "usage")),
+                    ToolUseId = OptionalString(data, "tool_use_id"),
+                    LastToolName = OptionalString(data, "last_tool_name"),
+                    Summary = OptionalString(data, "summary"),
+                };
+
+            case "task_notification":
+                RequireUuidAndSessionId(data);
+                return new TaskNotificationMessage
+                {
+                    Subtype = subtype,
+                    TaskId = RequiredString(data, "task_id"),
+                    Status = RequiredString(data, "status"),
+                    OutputFile = RequiredString(data, "output_file"),
+                    Summary = RequiredString(data, "summary"),
+                    ToolUseId = OptionalString(data, "tool_use_id"),
+                    Usage = Optional(data, "usage") is { } usage ? ParseTaskUsage(usage) : null,
+                };
+
+            case "task_updated":
+                var patch = Required(data, "patch");
+                return new TaskUpdatedMessage
+                {
+                    Subtype = subtype,
+                    TaskId = RequiredString(data, "task_id"),
+                    Patch = new TaskUpdatePatch
+                    {
+                        Status = OptionalString(patch, "status"),
+                        Description = OptionalString(patch, "description"),
+                        EndTime = OptionalInt64(patch, "end_time"),
+                        TotalPausedMilliseconds = OptionalInt64(patch, "total_paused_ms"),
+                        Error = OptionalString(patch, "error"),
+                        IsBackgrounded = Optional(patch, "is_backgrounded")?.GetBoolean(),
+                        Raw = patch,
+                    },
+                };
+
+            case "background_tasks_changed":
+                return new BackgroundTasksChangedMessage
+                {
+                    Subtype = subtype,
+                    Tasks = [.. Required(data, "tasks").EnumerateArray().Select(task => new BackgroundTask
+                    {
+                        TaskId = RequiredString(task, "task_id"),
+                        TaskType = RequiredString(task, "task_type"),
+                        Description = RequiredString(task, "description"),
+                        SubagentType = OptionalString(task, "subagent_type"),
+                        ParentTaskId = OptionalString(task, "parent_task_id"),
+                        Raw = task,
+                    })],
+                };
+
+            default:
+                return new SystemMessage { Subtype = subtype };
+        }
+    }
+
+    private static void RequireUuidAndSessionId(JsonElement data)
+    {
+        RequiredString(data, "uuid");
+        RequiredString(data, "session_id");
+    }
+
+    private static TaskUsage ParseTaskUsage(JsonElement usage) => new(
+        (int)RequiredInt64(usage, "total_tokens"),
+        (int)RequiredInt64(usage, "tool_uses"),
+        RequiredInt64(usage, "duration_ms"));
 
     private static AssistantMessage ParseAssistant(JsonElement data)
     {

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using PamisWang.ClaudeAgentSdk.Mcp;
 using PamisWang.ClaudeAgentSdk.Messages;
 
 namespace PamisWang.ClaudeAgentSdk.Tests.Messages;
@@ -280,6 +281,166 @@ public sealed class MessageParserTests
         Assert.Contains(mentioned, error.Message, StringComparison.Ordinal);
         Assert.NotNull(error.Raw);
     }
+
+    [Fact]
+    public void Parse_RecordedSubagentRun_TaskLifecycleGetsTypedMessages()
+    {
+        var started = First<TaskStartedMessage>("subagent_task", _ => true);
+        var updated = First<TaskUpdatedMessage>("subagent_task", _ => true);
+        var notification = First<TaskNotificationMessage>("subagent_task", _ => true);
+        var running = First<BackgroundTasksChangedMessage>("subagent_task", message => message.Tasks.Count > 0);
+
+        Assert.Equal("task_started", started.Subtype);
+        Assert.Equal("local_agent", started.TaskType);
+        Assert.Equal("echoer", started.SubagentType);
+        Assert.StartsWith("toolu_", started.ToolUseId, StringComparison.Ordinal);
+        Assert.Equal(started.TaskId, updated.TaskId);
+        Assert.Equal("completed", updated.Patch.Status);
+        Assert.True(updated.Patch.IsTerminal);
+        Assert.NotNull(updated.Patch.EndTime);
+        Assert.Equal(started.TaskId, notification.TaskId);
+        Assert.Equal("completed", notification.Status);
+        Assert.NotNull(notification.Usage);
+        Assert.Equal(started.TaskId, running.Tasks.Single().TaskId);
+        Assert.Equal("echoer", running.Tasks.Single().SubagentType);
+        // 仍是 SystemMessage：原本用 Subtype 判斷的程式照樣能用
+        Assert.IsAssignableFrom<SystemMessage>(started);
+    }
+
+    [Fact]
+    public void Parse_TaskProgress_ReadsUsageAndSummary()
+    {
+        var message = Assert.IsType<TaskProgressMessage>(Parse(
+            """{"type":"system","subtype":"task_progress","task_id":"t1","description":"Echo","usage":{"total_tokens":120,"tool_uses":2,"duration_ms":3500},"last_tool_name":"Read","summary":"正在讀檔","uuid":"u","session_id":"s"}"""));
+
+        Assert.Equal("t1", message.TaskId);
+        Assert.Equal(new TaskUsage(120, 2, 3500), message.Usage);
+        Assert.Equal("Read", message.LastToolName);
+        Assert.Equal("正在讀檔", message.Summary);
+    }
+
+    [Theory]
+    [InlineData("""{"type":"system","subtype":"task_started","description":"d","uuid":"u","session_id":"s"}""", "task_id")]
+    [InlineData("""{"type":"system","subtype":"task_started","task_id":"t","description":"d","session_id":"s"}""", "uuid")]
+    [InlineData("""{"type":"system","subtype":"task_progress","task_id":"t","description":"d","uuid":"u","session_id":"s"}""", "usage")]
+    [InlineData("""{"type":"system","subtype":"task_notification","task_id":"t","status":"completed","summary":"s","uuid":"u","session_id":"s"}""", "output_file")]
+    [InlineData("""{"type":"system","subtype":"task_updated","task_id":"t"}""", "patch")]
+    [InlineData("""{"type":"system","subtype":"background_tasks_changed","tasks":[{"task_id":"t","description":"d"}]}""", "task_type")]
+    public void Parse_TaskMessageMissingRequiredField_Throws(string json, string mentioned)
+    {
+        var error = Assert.Throws<MessageParseException>(() => Parse(json));
+
+        Assert.Contains(mentioned, error.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("killed", true)]
+    [InlineData("stopped", true)]
+    [InlineData("failed", true)]
+    [InlineData("running", false)]
+    [InlineData(null, false)]
+    public void TaskUpdatePatch_IsTerminal_MatchesPythonTerminalStatuses(string? status, bool terminal) =>
+        Assert.Equal(terminal, new TaskUpdatePatch { Status = status }.IsTerminal);
+
+    [Fact]
+    public void ParseMcpStatus_ReadsServerInfoToolsAndAnnotations()
+    {
+        var servers = MessageParser.ParseMcpStatus(Json(
+            """
+            {"mcpServers":[
+              {"name":"docs","status":"connected","serverInfo":{"name":"docs-server","version":"1.2.0"},"scope":"project",
+               "config":{"type":"http","url":"http://x"},"tools":[{"name":"search","description":"搜尋","annotations":{"readOnly":true,"openWorld":false}}]},
+              {"name":"ghost","status":"failed","error":"Connection closed"}]}
+            """));
+
+        var docs = servers[0];
+        Assert.Equal(new McpServerInfo("docs-server", "1.2.0"), docs.ServerInfo);
+        Assert.Equal("project", docs.Scope);
+        Assert.Equal("http", docs.Config!.Value.GetProperty("type").GetString());
+        var tool = docs.Tools.Single();
+        Assert.Equal("search", tool.Name);
+        Assert.True(tool.IsReadOnly);
+        Assert.False(tool.IsOpenWorld);
+        Assert.Null(tool.IsDestructive);
+        Assert.Equal("failed", servers[1].Status);
+        Assert.Equal("Connection closed", servers[1].Error);
+        Assert.Empty(servers[1].Tools);
+    }
+
+    [Fact]
+    public void ParseReloadPluginsResult_ReadsListsAndHeld()
+    {
+        var result = MessageParser.ParseReloadPluginsResult(Json(
+            """
+            {"commands":[{"name":"review","description":"Review the diff","argumentHint":"[branch]","aliases":["r"]}],
+             "agents":[{"name":"Explore","description":"Search"}],
+             "plugins":[{"name":"demo","path":"/plugins/demo","version":"0.1.0"}],
+             "mcpServers":[{"name":"docs","status":"pending"}],"error_count":1,"held":true,
+             "cache_impact":{"mcp_servers_added":["docs"],"mcp_servers_removed":[],"lsp_tool_change":null}}
+            """));
+
+        Assert.Equal("[branch]", result.Commands.Single().ArgumentHint);
+        Assert.Equal("r", result.Commands.Single().Raw.GetProperty("aliases")[0].GetString());
+        Assert.Equal("Explore", result.Agents.Single().GetProperty("name").GetString());
+        Assert.Equal("0.1.0", result.Plugins.Single().Version);
+        Assert.Equal("pending", result.McpServers.Single().Status);
+        Assert.Equal(1, result.ErrorCount);
+        Assert.True(result.Held);
+    }
+
+    [Fact]
+    public void ParseReloadSkillsResult_CommandWithoutArgumentHint_UsesEmptyString()
+    {
+        var skills = MessageParser.ParseReloadSkillsResult(Json("""{"skills":[{"name":"pdf","description":"Work with PDFs"}]}"""));
+
+        Assert.Equal("pdf", skills.Single().Name);
+        Assert.Equal("", skills.Single().ArgumentHint);
+    }
+
+    [Fact]
+    public void ParseMcpResourceContents_ReadsTextAndBlob()
+    {
+        var contents = MessageParser.ParseMcpResourceContents(Json(
+            """{"contents":[{"uri":"ui://a","mimeType":"text/html","text":"<p>hi</p>","_meta":{"ui":{}}},{"uri":"ui://b","blob":"AAE="}]}"""));
+
+        Assert.Equal("text/html", contents[0].MimeType);
+        Assert.Equal("<p>hi</p>", contents[0].Text);
+        Assert.True(contents[0].Raw.TryGetProperty("_meta", out _));
+        Assert.Equal("AAE=", contents[1].Blob);
+    }
+
+    [Theory]
+    [InlineData("""{"filesChanged":[]}""", "canRewind")]
+    [InlineData("""{"canRewind":"yes"}""", "rewind_files")]
+    public void ParseRewindFilesResult_MissingOrMalformedField_Throws(string json, string mentioned)
+    {
+        var error = Assert.Throws<MessageParseException>(() => MessageParser.ParseRewindFilesResult(Json(json)));
+
+        Assert.Contains(mentioned, error.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("""{"added":[],"removed":[]}""", "errors")]
+    [InlineData("""{"mcpServers":[{"status":"connected"}]}""", "name")]
+    public void ParseMcpResponses_MissingField_Throws(string json, string mentioned)
+    {
+        var data = Json(json);
+        var error = Assert.Throws<MessageParseException>(() =>
+        {
+            if (data.TryGetProperty("mcpServers", out _))
+            {
+                MessageParser.ParseMcpStatus(data);
+            }
+            else
+            {
+                MessageParser.ParseMcpSetServersResult(data);
+            }
+        });
+
+        Assert.Contains(mentioned, error.Message, StringComparison.Ordinal);
+    }
+
+    private static JsonElement Json(string json) => JsonSerializer.Deserialize<JsonElement>(json);
 
     private static ClaudeMessage Parse(string json) => MessageParser.Parse(JsonSerializer.Deserialize<JsonElement>(json));
 

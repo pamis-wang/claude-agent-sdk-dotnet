@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using PamisWang.ClaudeAgentSdk.Mcp;
 using PamisWang.ClaudeAgentSdk.Permissions;
 using PamisWang.ClaudeAgentSdk.Protocol;
 
@@ -295,6 +296,162 @@ public sealed class ControlProtocolTests : IAsyncLifetime, IAsyncDisposable
         await cancelled.Task.WaitAsync(Timeout);
         Assert.True(_transport.Disposed);
         Assert.True(_transport.HasNoPendingWrites);
+    }
+
+    [Theory]
+    [InlineData("set_permission_mode", """{"subtype":"set_permission_mode","mode":"auto"}""")]
+    [InlineData("rewind_files", """{"subtype":"rewind_files","user_message_id":"u1"}""")]
+    [InlineData("rewind_files_dry_run", """{"subtype":"rewind_files","user_message_id":"u1","dry_run":true}""")]
+    [InlineData("stop_task", """{"subtype":"stop_task","task_id":"t1"}""")]
+    [InlineData("background_tasks", """{"subtype":"background_tasks"}""")]
+    [InlineData("background_tasks_one", """{"subtype":"background_tasks","tool_use_id":"toolu_1"}""")]
+    [InlineData("mcp_status", """{"subtype":"mcp_status"}""")]
+    [InlineData("mcp_reconnect", """{"subtype":"mcp_reconnect","serverName":"docs"}""")]
+    [InlineData("mcp_toggle", """{"subtype":"mcp_toggle","serverName":"docs","enabled":false}""")]
+    [InlineData(
+        "mcp_set_servers",
+        """{"subtype":"mcp_set_servers","servers":{"docs":{"type":"sse","url":"https://example.com/sse","headers":{"Authorization":"Bearer t"},"tools":[{"name":"search","permission_policy":"always_ask"}],"timeout":30000,"alwaysLoad":true}}}""")]
+    [InlineData("mcp_read_resource", """{"subtype":"mcp_read_resource","serverName":"docs","uri":"ui://docs/view"}""")]
+    [InlineData("set_mcp_permission_mode_override", """{"subtype":"set_mcp_permission_mode_override","serverName":"docs","mode":"default"}""")]
+    [InlineData("set_mcp_permission_mode_override_clear", """{"subtype":"set_mcp_permission_mode_override","serverName":"docs","mode":null}""")]
+    [InlineData("reload_plugins", """{"subtype":"reload_plugins"}""")]
+    [InlineData(
+        "reload_plugins_hold_and_add",
+        """{"subtype":"reload_plugins","hold_on_cache_impact":true,"add_plugins":[{"type":"local","path":"/plugins/a","skipMcpDiscovery":true}]}""")]
+    [InlineData("reload_skills", """{"subtype":"reload_skills"}""")]
+    public async Task ControlRequests_SendTheSameFieldsAsTheOfficialSdks(string request, string expectedRequest)
+    {
+        var protocol = Start();
+
+        Task sending = request switch
+        {
+            "set_permission_mode" => protocol.SetPermissionModeAsync("auto"),
+            "rewind_files" => protocol.RewindFilesAsync("u1", dryRun: false),
+            "rewind_files_dry_run" => protocol.RewindFilesAsync("u1", dryRun: true),
+            "stop_task" => protocol.StopTaskAsync("t1"),
+            "background_tasks" => protocol.BackgroundTasksAsync(toolUseId: null),
+            "background_tasks_one" => protocol.BackgroundTasksAsync("toolu_1"),
+            "mcp_status" => protocol.GetMcpStatusAsync(),
+            "mcp_reconnect" => protocol.ReconnectMcpServerAsync("docs"),
+            "mcp_toggle" => protocol.ToggleMcpServerAsync("docs", enabled: false),
+            "mcp_set_servers" => protocol.SetMcpServersAsync(new Dictionary<string, McpServerConfig>
+            {
+                ["docs"] = new McpSseServerConfig("https://example.com/sse")
+                {
+                    Headers = new Dictionary<string, string> { ["Authorization"] = "Bearer t" },
+                    Tools = [new McpToolPolicy("search") { PermissionPolicy = "always_ask" }],
+                    Timeout = 30000,
+                    AlwaysLoad = true,
+                },
+            }),
+            "mcp_read_resource" => protocol.ReadMcpResourceAsync("docs", "ui://docs/view"),
+            "set_mcp_permission_mode_override" => protocol.SetMcpPermissionModeOverrideAsync("docs", "default"),
+            "set_mcp_permission_mode_override_clear" => protocol.SetMcpPermissionModeOverrideAsync("docs", mode: null),
+            "reload_plugins" => protocol.ReloadPluginsAsync(holdOnCacheImpact: false, addPlugins: []),
+            "reload_plugins_hold_and_add" => protocol.ReloadPluginsAsync(
+                holdOnCacheImpact: true,
+                addPlugins: [new LocalPlugin("/plugins/a") { SkipMcpDiscovery = true }]),
+            "reload_skills" => protocol.ReloadSkillsAsync(),
+            _ => throw new ArgumentOutOfRangeException(nameof(request), request, null),
+        };
+        var written = await _transport.NextWriteAsync();
+        RespondSuccess(written);
+        await sending.WaitAsync(Timeout);
+
+        Assert.Equal(expectedRequest, written.GetProperty("request").GetRawText());
+    }
+
+    [Fact]
+    public async Task InitializeAsync_WithOptions_SendsAgentsSkillsAndTypeScriptOnlyFields()
+    {
+        _protocol = new ControlProtocol(_transport, canUseTool: null)
+        {
+            InitializeOptions = new ClaudeAgentOptions
+            {
+                Agents = new Dictionary<string, AgentDefinition>
+                {
+                    ["reviewer"] = new("Reviews code.", "You review code.")
+                    {
+                        Tools = ["Read", "Grep"],
+                        Model = "haiku",
+                        Memory = "project",
+                        McpServers = ["docs"],
+                        InlineMcpServers = new Dictionary<string, McpServerConfig> { ["lint"] = new McpHttpServerConfig("http://127.0.0.1:5000/mcp") },
+                        MaxTurns = 5,
+                        Background = true,
+                        Effort = "low",
+                        PermissionMode = PermissionMode.Plan,
+                        OmitClaudeMd = true,
+                    },
+                },
+                Skills = SkillSelection.Only("pdf", "docx"),
+                ForwardSubagentText = true,
+                PlanModeInstructions = "List the steps only.",
+                ToolAliases = new Dictionary<string, string> { ["Bash"] = "mcp__workspace__bash" },
+                AgentProgressSummaries = true,
+                PerTaskStopAffordance = true,
+                Plugins = [new LocalPlugin("/plugins/a")],
+                PluginDelivery = PluginDelivery.Initialize,
+            },
+        };
+        _protocol.Start();
+
+        var initializing = _protocol.InitializeAsync(Timeout);
+        var request = await _transport.NextWriteAsync();
+        RespondSuccess(request);
+        await initializing;
+
+        Assert.Equal(
+            """
+            {"subtype":"initialize","hooks":null,
+            "agents":{"reviewer":{"description":"Reviews code.","prompt":"You review code.","tools":["Read","Grep"],"model":"haiku","memory":"project",
+            "mcpServers":["docs",{"lint":{"type":"http","url":"http://127.0.0.1:5000/mcp"}}],"maxTurns":5,"background":true,"effort":"low","permissionMode":"plan","omitClaudeMd":true}},
+            "skills":["pdf","docx"],"forwardSubagentText":true,"planModeInstructions":"List the steps only.",
+            "toolAliases":{"Bash":"mcp__workspace__bash"},"agentProgressSummaries":true,"perTaskStopAffordance":true,
+            "plugins":[{"type":"local","path":"/plugins/a"}]}
+            """.ReplaceLineEndings(""),
+            request.GetProperty("request").GetRawText());
+    }
+
+    [Fact]
+    public async Task InitializeAsync_DefaultOptions_SendsOnlyHooksLikePythonSdk()
+    {
+        _protocol = new ControlProtocol(_transport, canUseTool: null) { InitializeOptions = new ClaudeAgentOptions { Skills = SkillSelection.All } };
+        _protocol.Start();
+
+        var initializing = _protocol.InitializeAsync(Timeout);
+        var request = await _transport.NextWriteAsync();
+        RespondSuccess(request);
+        await initializing;
+
+        // 全部的 skill 只影響 --allowedTools，不送清單
+        Assert.Equal("""{"subtype":"initialize","hooks":null}""", request.GetProperty("request").GetRawText());
+    }
+
+    [Fact]
+    public async Task SendUserMessageAsync_VerbatimPrompts_MarksMessageClientComposed()
+    {
+        _protocol = new ControlProtocol(_transport, canUseTool: null) { VerbatimPrompts = true };
+        _protocol.Start();
+
+        await _protocol.SendUserMessageAsync("@notes.md 照原文");
+        var message = await _transport.NextWriteAsync();
+
+        Assert.True(message.GetProperty("client_composed").GetBoolean());
+        Assert.Equal("@notes.md 照原文", message.GetProperty("message").GetProperty("content").GetString());
+    }
+
+    [Fact]
+    public async Task SetPermissionModeAsync_ReturnsModeCliEchoes()
+    {
+        var protocol = Start();
+
+        var setting = protocol.SetPermissionModeAsync("acceptEdits");
+        var request = await _transport.NextWriteAsync();
+        _transport.Push("""{"type":"control_response","response":{"subtype":"success","request_id":"ID","response":{"mode":"acceptEdits"}}}"""
+            .Replace("ID", request.GetProperty("request_id").GetString(), StringComparison.Ordinal));
+
+        Assert.Equal("acceptEdits", await setting.WaitAsync(Timeout));
     }
 
     private ControlProtocol Start(Func<ToolPermissionRequest, CancellationToken, Task<PermissionResult>>? canUseTool = null)

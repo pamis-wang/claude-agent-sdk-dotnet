@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Any
 
 from claude_agent_sdk import (
+    AgentDefinition,
     ClaudeAgentOptions,
     ClaudeSDKClient,
     PermissionResultAllow,
@@ -35,6 +36,7 @@ from claude_agent_sdk import (
     ResultMessage,
     StreamEvent,
     ToolPermissionContext,
+    UserMessage,
 )
 from claude_agent_sdk import __version__ as SDK_VERSION
 from claude_agent_sdk._internal.transport.subprocess_cli import SubprocessCLITransport
@@ -288,6 +290,85 @@ async def context_usage(s: Session) -> None:
         await query._send_control_request({"subtype": "get_context_usage", "detail": "summary"})  # noqa: SLF001
 
 
+async def set_permission_mode(s: Session) -> None:
+    async with s.client() as client:
+        # 權限回呼是 deny_unexpected：acceptEdits 下 Write 不該再經過它
+        s.recorder.note("換成 acceptEdits，Write 不再經過權限回呼")
+        await client.set_permission_mode("acceptEdits")
+        await turn(client, WRITE_PROMPT)
+        s.recorder.note("換回 default")
+        await client.set_permission_mode("default")
+
+
+async def subagent_task(s: Session) -> None:
+    agents = {
+        "echoer": AgentDefinition(
+            description="Repeats the given word back. Use when asked to echo a word.",
+            prompt="You repeat the word you are given, nothing else.",
+            tools=[],
+            model="haiku",
+        )
+    }
+    async with s.client(agents=agents) as client:
+        await turn(client, "用 Agent 工具交辦給 echoer 這個 subagent，請它重複「鳳梨」這個詞。只做這件事，最後只回答 subagent 的結果。")
+
+
+async def mcp_status(s: Session) -> None:
+    # 啟動不了的 stdio server：不用真的有 MCP server，也看得到失敗、關閉與重連被拒絕
+    servers: dict[str, Any] = {"ghost": {"type": "stdio", "command": "nonexistent-mcp-server-for-fixtures"}}
+    async with s.client(mcp_servers=servers) as client:
+        await client.get_mcp_status()
+        s.recorder.note("關閉 ghost，再查一次")
+        await client.toggle_mcp_server("ghost", False)
+        await client.get_mcp_status()
+        s.recorder.note("關閉的 server 不能重新連線，CLI 回錯誤")
+        try:
+            await client.reconnect_mcp_server("ghost")
+        except Exception as e:  # noqa: BLE001 - 預期的錯誤，記下來就好
+            s.recorder.note(f"mcp_reconnect 失敗：{e}")
+
+
+async def rewind_files(s: Session) -> None:
+    async def allow(tool_name: str, tool_input: dict[str, Any], context: ToolPermissionContext) -> PermissionResultAllow:
+        s.recorder.note(f"can_use_tool：{tool_name}，允許")
+        return PermissionResultAllow(updated_input=tool_input)
+
+    # 要收到帶 uuid 的使用者訊息，才知道要還原到哪一則
+    async with s.client(allow, enable_file_checkpointing=True, extra_args={"replay-user-messages": None}) as client:
+        await client.query(WRITE_PROMPT)
+        user_uuid: str | None = None
+        async for message in client.receive_response():
+            if isinstance(message, UserMessage) and message.uuid and user_uuid is None:
+                user_uuid = message.uuid
+        assert user_uuid is not None
+        # Python SDK 的 rewind_files() 沒有 dry_run（對應 TypeScript SDK 的 rewindFiles(id, { dryRun })），直接送 control request
+        s.recorder.note("dry_run 預覽要還原哪些檔案")
+        query = client._query  # noqa: SLF001
+        assert query is not None
+        await query._send_control_request({"subtype": "rewind_files", "user_message_id": user_uuid, "dry_run": True})  # noqa: SLF001
+        s.recorder.note("真的還原")
+        await client.rewind_files(user_uuid)
+
+
+async def ts_control_requests(s: Session) -> None:
+    # Python SDK 沒有這些方法（都是 TypeScript SDK 才有的），直接送 control request；格式照 TS SDK 送出的
+    async with s.client() as client:
+        query = client._query  # noqa: SLF001
+        assert query is not None
+        s.recorder.note("mcp_set_servers：連不上的 http server，結果會列在 errors")
+        await query._send_control_request(  # noqa: SLF001
+            {"subtype": "mcp_set_servers", "servers": {"ghost": {"type": "http", "url": "http://127.0.0.1:9/mcp"}}}
+        )
+        s.recorder.note("set_mcp_permission_mode_override：固定成 default，再清掉")
+        await query._send_control_request({"subtype": "set_mcp_permission_mode_override", "serverName": "ghost", "mode": "default"})  # noqa: SLF001
+        await query._send_control_request({"subtype": "set_mcp_permission_mode_override", "serverName": "ghost", "mode": None})  # noqa: SLF001
+        s.recorder.note("background_tasks：沒有前景任務時，全部移到背景與指定一個")
+        await query._send_control_request({"subtype": "background_tasks"})  # noqa: SLF001
+        await query._send_control_request({"subtype": "background_tasks", "tool_use_id": "toolu_nonexistent"})  # noqa: SLF001
+        s.recorder.note("stop_task：沒有這個任務")
+        await client.stop_task("nonexistent")
+
+
 @dataclass(frozen=True)
 class Scenario:
     name: str
@@ -308,6 +389,15 @@ SCENARIOS = [
     Scenario("set_model", "對話中途換模型，再換回預設（set_model）", set_model),
     Scenario("apply_flag_settings", "對話中途改思考深度，再清掉（apply_flag_settings，Python SDK 沒有公開的方法）", apply_flag_settings),
     Scenario("context_usage", "查 context 用量：說話前用預設、說一句之後用 summary（get_context_usage）", context_usage),
+    Scenario("set_permission_mode", "對話中途換成 acceptEdits，Write 不再詢問，最後換回 default（set_permission_mode）", set_permission_mode),
+    Scenario("subagent_task", "自訂 subagent（initialize 的 agents），交辦工作時的任務訊息", subagent_task),
+    Scenario("mcp_status", "MCP server 的狀態、關閉與重連（mcp_status、mcp_toggle、mcp_reconnect）", mcp_status),
+    Scenario("rewind_files", "開啟檔案檢查點，寫檔後預覽再還原（rewind_files，dry_run 是 TypeScript SDK 才有的）", rewind_files),
+    Scenario(
+        "ts_control_requests",
+        "TypeScript SDK 才有的 control request：mcp_set_servers、set_mcp_permission_mode_override、background_tasks，加上 stop_task",
+        ts_control_requests,
+    ),
 ]
 
 

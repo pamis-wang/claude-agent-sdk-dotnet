@@ -1,5 +1,65 @@
 # Changelog
 
+## 0.1.0-preview.10（2026-11-03）
+
+補齊「對話與 session」與「工具、權限與擴充」兩塊：Python SDK 有的都有了，TypeScript SDK 才有的也照它送給 CLI 的格式補上，
+並用 Claude Code 2.1.312 實際跑過每一個選項與 control request。
+
+### 對話與 session
+
+- `ClaudeAgentOptions.ContinueConversation`（`--continue`）、`SessionId`（`--session-id`）、`ForkSession`（`--fork-session`）、
+  `ResumeSessionAt`（`--resume-session-at`）、`ResumeDropsTurn`（`--resume-drops-turn`）。
+- `PersistSession = false`：不存 session（`--no-session-persistence`）。Python 沒有，對應 TS 的 `persistSession`。
+- `VerbatimPrompts`：使用者訊息帶 `client_composed: true`，照原文送出，不展開 `@檔案`、不執行斜線指令。
+- `TaskBudget`：API 端的任務預算（`--task-budget`），必須大於 0。Python 寫成 `{"total": ...}`，這裡直接放數字。
+- `EnableFileCheckpointing` 與 `ClaudeAgentClient.RewindFilesAsync`：把檔案還原到某則使用者訊息時的樣子，回傳 `RewindFilesResult`；
+  `dryRun` 只預覽。Python 的 `rewind_files()` 不回傳結果也沒有 `dryRun`，對應 TS 的 `rewindFiles()`。
+
+### 工具與權限
+
+- `PermissionMode`（`--permission-mode`）與 `ClaudeAgentClient.SetPermissionModeAsync`（`set_permission_mode`）：
+  `PermissionMode` 是字串包成的型別（`PermissionMode.Auto` 這樣寫），CLI 新增的模式可以用 `new PermissionMode("...")` 帶；
+  `SetPermissionModeAsync` 回傳 CLI 回報目前生效的模式，Python 與 TS 都不回傳。
+- `AllowDangerouslySkipPermissions`（TS 才有）：之後可以切到 `BypassPermissions`；沒設定時 CLI 會拒絕切換。
+- `PermissionPromptToolName`（`--permission-prompt-tool`）與 `DisablePermissionPrompts`（`--permission-prompts none`，TS 才有）。
+- `Tools`（`--tools`，空的清單是停用所有內建工具）、`AllowedTools`（`--allowedTools`）。
+- `ToolAliases`、`PlanModeInstructions`（TS 才有，放在 initialize 裡送）、`AskUserQuestionPreviewFormat`（TS 的 `toolConfig.askUserQuestion.previewFormat`）。
+
+### MCP
+
+- `McpServers`（`--mcp-config`）：`McpStdioServerConfig`、`McpSseServerConfig`、`McpHttpServerConfig`，含 TS 才有的 `Timeout`、`AlwaysLoad` 與工具權限政策（`McpToolPolicy`）；
+  `StrictMcpConfig`（`--strict-mcp-config`）。型別放在新的 `PamisWang.ClaudeAgentSdk.Mcp` 命名空間。
+- `GetMcpStatusAsync`（回傳型別化的 `McpServerStatus`）、`ReconnectMcpServerAsync`、`ToggleMcpServerAsync`。
+- TS 才有的：`SetMcpServersAsync`（`mcp_set_servers`）、`ReadMcpResourceAsync`（`mcp_read_resource`）、`SetMcpPermissionModeOverrideAsync`（`set_mcp_permission_mode_override`）。
+
+### Subagent 與背景任務
+
+- `Agents`（`AgentDefinition`，放在 initialize 裡送，欄位順序跟 Python 一樣，另有 TS 才有的 `AutoCompactWindow`、`OmitClaudeMd`、`Observer` 等）、
+  `Agent`（`--agent`，TS 才有）、`ForwardSubagentText`、`AgentProgressSummaries`（TS 才有）。
+- 任務訊息有了專屬型別，都是 `SystemMessage` 的子型別，原本用 `Subtype` 判斷的程式不受影響：
+  `TaskStartedMessage`、`TaskProgressMessage`、`TaskNotificationMessage`、`TaskUpdatedMessage`（`Patch.IsTerminal` 判斷是否結束），
+  以及 TS 才有的 `BackgroundTasksChangedMessage`。必要欄位跟 Python 一樣，缺了丟 `MessageParseException`。
+- `StopTaskAsync`（`stop_task`）；TS 才有的 `BackgroundTasksAsync`（`background_tasks`，跟按 Ctrl+B 一樣）與 `PerTaskStopAffordance`。
+
+### 設定、外掛與 skill
+
+- `Settings`（`JsonObject`）或 `SettingsFile`（路徑）、`Sandbox`（併進 `--settings` 的 `sandbox`）、`ManagedSettings`（`--managed-settings`，TS 才有）、
+  `SettingSources`（`--setting-sources`，`SettingSource.User` 等）。
+- `Plugins`（`LocalPlugin`，`SkipMcpDiscovery` 時用 `--plugin-dir-no-mcp`）與 `PluginDelivery`（TS 才有：`Initialize` 時放在 initialize 裡送，CLI 用 `--await-initialize` 啟動）。
+- `Skills`：`SkillSelection.All` 或 `SkillSelection.Only(...)`，自動在 `--allowedTools` 加上 `Skill` 規則，名稱清單放進 initialize；
+  名稱的檢查跟 Python 一樣。Python 還會改掉 `SettingSources` 的預設，這裡照 TS 不動它。
+- TS 才有的 `ReloadPluginsAsync`（`reload_plugins`，可以 `holdOnCacheImpact`、`addPlugins`）與 `ReloadSkillsAsync`（`reload_skills`）。
+
+### 行為與相容性
+
+- 互相衝突的選項在 `ConnectAsync` 丟 `ArgumentException`：例如 `ContinueConversation` 與 `ResumeSessionId` 同時指定、`ForkSession` 沒有要接續的 session、
+  `SessionId` 搭配接續卻沒有 `ForkSession`、`CanUseTool` 與 `PermissionPromptToolName` 同時設定、`Settings`／`SettingsFile`／`Sandbox` 重疊。
+  Python 多半不檢查，限制來自 CLI 與 TS SDK 的說明。
+- Windows 上 `SessionId`、`ResumeSessionAt`、`ResumeDropsTurn` 跟 `ResumeSessionId` 一樣擋 cmd.exe 的特殊字元。
+- `ExtraArguments` 在設定了 `PermissionPromptToolName` 時，也不能放 `permission-prompt-tool`。
+- 沒有設定新選項時，送出的 CLI 參數與 initialize 跟之前一樣。
+- 新增協定樣本（CLI 2.1.312）：`set_permission_mode`、`subagent_task`、`mcp_status`、`rewind_files`、`ts_control_requests`。
+
 ## 0.1.0-preview.9（2026-11-03）
 
 - `ClaudeAgentClient.GetContextUsageAsync`：查目前 context window 的用量，依類別拆開，跟 CLI 的 `/context` 指令一樣；
