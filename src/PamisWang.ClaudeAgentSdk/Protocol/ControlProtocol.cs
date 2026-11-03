@@ -356,33 +356,38 @@ internal sealed class ControlProtocol : IAsyncDisposable
         var result = await _canUseTool(permissionRequest, cancellationToken).ConfigureAwait(false);
         return result switch
         {
-            PermissionResultAllow allow => writer =>
-            {
-                writer.WriteString("behavior", "allow");
-                writer.WritePropertyName("updatedInput");
-                (allow.UpdatedInput ?? input).WriteTo(writer);
-                if (allow.UpdatedPermissions is not null)
-                {
-                    writer.WriteStartArray("updatedPermissions");
-                    foreach (var update in allow.UpdatedPermissions)
-                    {
-                        update.WriteTo(writer);
-                    }
-
-                    writer.WriteEndArray();
-                }
-            },
-            PermissionResultDeny deny => writer =>
-            {
-                writer.WriteString("behavior", "deny");
-                writer.WriteString("message", deny.Message);
-                if (deny.Interrupt)
-                {
-                    writer.WriteBoolean("interrupt", true);
-                }
-            },
+            PermissionResultAllow allow => writer => WriteAllow(writer, allow, input),
+            PermissionResultDeny deny => writer => WriteDeny(writer, deny),
             _ => throw new InvalidOperationException("CanUseTool 要回傳 PermissionResultAllow 或 PermissionResultDeny。"),
         };
+    }
+
+    // switch 分支直接寫成多行的 lambda 時，dotnet format 會要求把分支後面的逗號拆到下一行，所以抽成方法
+    private static void WriteAllow(Utf8JsonWriter writer, PermissionResultAllow allow, JsonElement input)
+    {
+        writer.WriteString("behavior", "allow");
+        writer.WritePropertyName("updatedInput");
+        (allow.UpdatedInput ?? input).WriteTo(writer);
+        if (allow.UpdatedPermissions is not null)
+        {
+            writer.WriteStartArray("updatedPermissions");
+            foreach (var update in allow.UpdatedPermissions)
+            {
+                update.WriteTo(writer);
+            }
+
+            writer.WriteEndArray();
+        }
+    }
+
+    private static void WriteDeny(Utf8JsonWriter writer, PermissionResultDeny deny)
+    {
+        writer.WriteString("behavior", "deny");
+        writer.WriteString("message", deny.Message);
+        if (deny.Interrupt)
+        {
+            writer.WriteBoolean("interrupt", true);
+        }
     }
 
     private static void CancelQuietly(CancellationTokenSource cancellation)
