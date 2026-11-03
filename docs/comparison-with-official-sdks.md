@@ -7,7 +7,7 @@ How `PamisWang.ClaudeAgentSdk` compares with Anthropic's official Claude Agent S
 - Surveyed: 2026-11-03
 - Official Python: claude-agent-sdk 0.2.177 (8abce11)
 - Official TypeScript: @anthropic-ai/claude-agent-sdk 0.3.317
-- .NET: PamisWang.ClaudeAgentSdk 0.1.0-preview.8, plus the unreleased `GetContextUsageAsync`
+- .NET: PamisWang.ClaudeAgentSdk 0.1.0-preview.9
 - The .NET package tracks Python 0.2.174; 0.2.175 and 0.2.176 only update the bundled Claude CLI (2.1.314, 2.1.316), and 0.2.177 bundles CLI 2.1.317 and adds `HookMatcher.on_failure`, part of the hooks the .NET package leaves out on purpose. None of the APIs the .NET package uses changed, so features are compared against the latest release. TypeScript columns are based on the `sdk.d.ts` types in the package.
 
 Related: [Claude .NET vs Codex .NET](claude-vs-codex-dotnet.md). The [comparison of Codex .NET with the official SDKs](https://github.com/pamis-wang/codex-agent-sdk-dotnet/blob/main/docs/comparison-with-official-sdks.md) is in the codex-agent-sdk-dotnet repo.

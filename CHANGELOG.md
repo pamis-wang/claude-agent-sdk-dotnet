@@ -1,6 +1,6 @@
 # Changelog
 
-## 未發佈
+## 0.1.0-preview.9（2026-11-03）
 
 - `ClaudeAgentClient.GetContextUsageAsync`：查目前 context window 的用量，依類別拆開，跟 CLI 的 `/context` 指令一樣；
   對應 Python SDK 的 `get_context_usage()`。回傳型別化的 `ContextUsage`：總量、上限、百分比、自動壓縮的設定、
