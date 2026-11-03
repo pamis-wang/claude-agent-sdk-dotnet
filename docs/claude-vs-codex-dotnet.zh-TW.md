@@ -26,7 +26,7 @@
 | 套件 | `PamisWang.ClaudeAgentSdk` 0.1.0-preview.5 | `PamisWang.CodexAgentSdk` 0.1.0-preview.1 |
 | 移植來源 | claude-agent-sdk-python v0.2.174（MIT） | openai/codex `sdk/python` @ 67f0994（Apache-2.0） |
 | 本身的授權 | MIT | Apache-2.0 |
-| 底層 CLI | Claude Code CLI 2.1.312，最低 2.0.0 | Codex CLI 0.166.0，最低 0.151.0 |
+| 底層 CLI | Claude Code CLI 2.1.310，最低 2.0.0 | Codex CLI 0.166.0，最低 0.151.0 |
 | 目標框架 / 相依 | .NET 10，沒有相依套件 | .NET 10，沒有相依套件 |
 | AOT | `IsAotCompatible` | `IsAotCompatible`（協定型別附 source-gen context） |
 | 手寫程式碼 | 約 2,560 行（48 個檔案） | 約 3,870 行（36 個檔案） |

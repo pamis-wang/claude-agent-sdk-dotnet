@@ -19,7 +19,7 @@ dotnet add package PamisWang.ClaudeAgentSdk --prerelease
 |---|---|
 | Python SDK | v0.2.174 |
 | TypeScript SDK | v0.3.316（只參考 Python 沒有的 `apply_flag_settings`） |
-| Claude Code CLI | 2.1.312（Python SDK v0.2.174 打包的版本） |
+| Claude Code CLI | 2.1.310（Python SDK v0.2.174 打包的版本） |
 | 錄協定樣本用的 CLI | 2.1.309 |
 
 ## 跟官方 SDK 比較

@@ -26,7 +26,7 @@ Related: [Claude .NET vs official SDKs](comparison-with-official-sdks.md). The [
 | Package | `PamisWang.ClaudeAgentSdk` 0.1.0-preview.5 | `PamisWang.CodexAgentSdk` 0.1.0-preview.1 |
 | Ported from | claude-agent-sdk-python v0.2.174 (MIT) | openai/codex `sdk/python` @ 67f0994 (Apache-2.0) |
 | Own license | MIT | Apache-2.0 |
-| CLI | Claude Code CLI 2.1.312, minimum 2.0.0 | Codex CLI 0.166.0, minimum 0.151.0 |
+| CLI | Claude Code CLI 2.1.310, minimum 2.0.0 | Codex CLI 0.166.0, minimum 0.151.0 |
 | Target / dependencies | .NET 10, no package dependencies | .NET 10, no package dependencies |
 | AOT | `IsAotCompatible` | `IsAotCompatible` (protocol types ship with a source-generated context) |
 | Hand-written code | about 2,560 lines (48 files) | about 3,870 lines (36 files) |

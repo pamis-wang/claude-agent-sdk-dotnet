@@ -19,7 +19,7 @@ dotnet add package PamisWang.ClaudeAgentSdk --prerelease
 |---|---|
 | Python SDK | v0.2.174 |
 | TypeScript SDK | v0.3.316 (only for `apply_flag_settings`, which Python lacks) |
-| Claude Code CLI | 2.1.312 (bundled with Python SDK v0.2.174) |
+| Claude Code CLI | 2.1.310 (bundled with Python SDK v0.2.174) |
 | CLI used to record protocol fixtures | 2.1.309 |
 
 ## Compared with the official SDKs
