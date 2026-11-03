@@ -267,6 +267,12 @@ public sealed class SubprocessTransportTests : IDisposable
             ResumeSessionId = "34953276-f9da-4b8c-a789-77d8ee05bc37",
             IncludePartialMessages = true,
             DisallowedTools = ["AskUserQuestion"],
+            // 引號、空白、& 都要原樣送到子程序，Windows 也是
+            ExtraArguments = new Dictionary<string, string?>
+            {
+                ["mcp-config"] = """{"mcpServers": {"紫苑": {"command": "node", "args": ["a & b"]}}}""",
+                ["strict-mcp-config"] = null,
+            },
             EnvironmentVariables = allEnv,
             StandardErrorCallback = stderr,
             WarningCallback = warning,

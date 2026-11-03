@@ -59,6 +59,16 @@ public sealed class ClaudeAgentOptions
     public IReadOnlyDictionary<string, string> EnvironmentVariables { get; init; } = ReadOnlyDictionary<string, string>.Empty;
 
     /// <summary>
+    /// 額外的 CLI 參數，給這個類別還沒有對應屬性的旗標用，例如 <c>max-turns</c>、<c>add-dir</c>、<c>permission-mode</c>。
+    /// key 是旗標名稱，不含開頭的 <c>--</c>；value 是 <see langword="null"/> 時只帶旗標、不帶值。
+    /// 值整個當成一個參數傳，可以是含引號的 JSON；<c>-</c> 開頭的值寫成 <c>--旗標=值</c>，免得被 CLI 當成另一個旗標。
+    /// 已經有對應屬性的旗標請用屬性設定。<c>output-format</c>、<c>input-format</c> 由這個套件控制，不能放；
+    /// 設定了 <see cref="CanUseTool"/> 時，<c>permission-prompt-tool</c> 也不能放。
+    /// 對應 Python 的 <c>extra_args</c>。
+    /// </summary>
+    public IReadOnlyDictionary<string, string?> ExtraArguments { get; init; } = ReadOnlyDictionary<string, string?>.Empty;
+
+    /// <summary>
     /// 每收到一行 CLI 的 stderr 就呼叫一次，空行不算。沒指定時不導向 stderr，CLI 直接寫到目前程序的 stderr。
     /// 對應 Python 的 <c>stderr</c>。
     /// </summary>

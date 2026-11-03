@@ -83,6 +83,10 @@ public sealed class ClaudeAgentClient : IAsyncDisposable
     /// <exception cref="CliConnectionException">啟動失敗，或 CLI 在握手完成前就結束。</exception>
     /// <exception cref="TimeoutException">CLI 遲遲沒有回應初始化。</exception>
     /// <exception cref="InvalidOperationException">已經連線過。</exception>
+    /// <exception cref="ArgumentException">
+    /// 選項組不出 CLI 參數：Windows 上的 <see cref="ClaudeAgentOptions.ResumeSessionId"/> 含有 cmd.exe 的特殊字元，
+    /// 或 <see cref="ClaudeAgentOptions.ExtraArguments"/> 的旗標名稱不能用。
+    /// </exception>
     public async Task ConnectAsync(CancellationToken cancellationToken = default)
     {
         lock (_gate)

@@ -133,6 +133,112 @@ public sealed class CliArgumentsTests
     }
 
     [Fact]
+    public void Build_ExtraArguments_ComeBeforeEffortLikePythonSdk()
+    {
+        var options = new ClaudeAgentOptions
+        {
+            IncludePartialMessages = true,
+            Effort = "low",
+            ExtraArguments = new Dictionary<string, string?>
+            {
+                ["max-turns"] = "3",
+                ["strict-mcp-config"] = null,
+                ["add-dir"] = @"D:\work\shared",
+            },
+        };
+
+        var args = CliArguments.Build(options, isWindows: false);
+
+        Assert.Equal(
+            [
+                "--output-format", "stream-json", "--verbose", "--system-prompt", "",
+                "--include-partial-messages",
+                "--max-turns", "3",
+                "--strict-mcp-config",
+                "--add-dir", @"D:\work\shared",
+                "--effort", "low",
+                "--input-format", "stream-json",
+            ],
+            args);
+    }
+
+    [Fact]
+    public void Build_ExtraArgumentValueStartingWithDash_UsesEqualsForm()
+    {
+        // 跟 Python 一樣：分成兩個參數的話，--evil 會被 CLI 當成另一個旗標
+        var options = new ClaudeAgentOptions { ExtraArguments = new Dictionary<string, string?> { ["future-flag"] = "--evil" } };
+
+        var args = CliArguments.Build(options, isWindows: false);
+
+        Assert.Contains("--future-flag=--evil", args);
+        Assert.DoesNotContain("--evil", args);
+        Assert.DoesNotContain("--future-flag", args);
+    }
+
+    [Fact]
+    public void Build_OnWindows_ExtraArgumentJsonValueStaysOneArgument()
+    {
+        // JSON 一定有引號；不經過 cmd.exe，Windows 上也不擋 ResumeSessionId 擋的那些字元
+        const string config = """{"mcpServers": {"紫苑": {"command": "node", "args": ["a & b"]}}}""";
+        var options = new ClaudeAgentOptions { ExtraArguments = new Dictionary<string, string?> { ["mcp-config"] = config } };
+
+        var args = CliArguments.Build(options, isWindows: true);
+
+        Assert.Equal(config, args[args.ToList().IndexOf("--mcp-config") + 1]);
+    }
+
+    [Fact]
+    public void Build_ExtraArgumentEmptyValue_IsPassedAsEmptyArgument()
+    {
+        var options = new ClaudeAgentOptions { ExtraArguments = new Dictionary<string, string?> { ["tools"] = "" } };
+
+        var args = CliArguments.Build(options, isWindows: false);
+
+        Assert.Equal("", args[args.ToList().IndexOf("--tools") + 1]);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(" ")]
+    [InlineData("--max-turns")]
+    [InlineData("-p")]
+    [InlineData("max-turns=3")]
+    [InlineData("output-format")]
+    [InlineData("input-format")]
+    public void Build_InvalidExtraArgumentFlag_Throws(string flag)
+    {
+        var options = new ClaudeAgentOptions { ExtraArguments = new Dictionary<string, string?> { [flag] = "x" } };
+
+        var exception = Assert.Throws<ArgumentException>(() => CliArguments.Build(options, isWindows: false));
+        Assert.Equal(nameof(ClaudeAgentOptions.ExtraArguments), exception.ParamName);
+    }
+
+    [Fact]
+    public void Build_PermissionPromptToolInExtraArguments_IsRejectedWithCanUseTool()
+    {
+        var options = new ClaudeAgentOptions
+        {
+            CanUseTool = (_, _) => Task.FromResult<PermissionResult>(new PermissionResultAllow()),
+            ExtraArguments = new Dictionary<string, string?> { ["permission-prompt-tool"] = "mcp__approver__ask" },
+        };
+
+        Assert.Throws<ArgumentException>(() => CliArguments.Build(options, isWindows: false));
+    }
+
+    [Fact]
+    public void Build_PermissionPromptToolInExtraArguments_IsAllowedWithoutCanUseTool()
+    {
+        var options = new ClaudeAgentOptions
+        {
+            ExtraArguments = new Dictionary<string, string?> { ["permission-prompt-tool"] = "mcp__approver__ask" },
+        };
+
+        var args = CliArguments.Build(options, isWindows: false);
+
+        Assert.Equal("mcp__approver__ask", args[args.ToList().IndexOf("--permission-prompt-tool") + 1]);
+    }
+
+    [Fact]
     public void Build_ResumeSessionIdStartingWithDash_StaysOneArgument()
     {
         // 分成兩個參數的話，CLI 會把 --model 當成另一個旗標
