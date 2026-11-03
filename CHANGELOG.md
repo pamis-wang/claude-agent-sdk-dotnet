@@ -1,6 +1,6 @@
 # Changelog
 
-## 未發佈
+## 0.1.0-preview.7（2026-11-03）
 
 - `ClaudeAgentOptions.ExtraArguments`：額外的 CLI 參數，給還沒有專屬屬性的旗標用（例如 `max-turns`、`add-dir`、`mcp-config`），
   對應 Python SDK 的 `extra_args`。key 是旗標名稱，不含 `--`；value 是 `null` 時只帶旗標。
