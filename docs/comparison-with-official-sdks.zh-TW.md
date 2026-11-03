@@ -7,7 +7,7 @@
 - 調查日期：2026-11-03
 - 官方 Python：claude-agent-sdk 0.2.177（8abce11）
 - 官方 TypeScript：@anthropic-ai/claude-agent-sdk 0.3.317
-- .NET：PamisWang.ClaudeAgentSdk 0.1.0-preview.8
+- .NET：PamisWang.ClaudeAgentSdk 0.1.0-preview.8，加上還沒發佈的 `GetContextUsageAsync`
 - .NET 版對照 Python 0.2.174；0.2.175、0.2.176 只更新打包的 Claude CLI（2.1.314、2.1.316）；0.2.177 打包 CLI 2.1.317，新增的 `HookMatcher.on_failure` 屬於 .NET 刻意不做的 hook。.NET 用到的 API 都沒有變動，所以功能面仍以最新版對照。TypeScript 欄位依套件內的 `sdk.d.ts` 型別判斷。
 
 相關文件：[Claude .NET vs Codex .NET](claude-vs-codex-dotnet.zh-TW.md)。[Codex .NET 與官方 SDK 的對照](https://github.com/pamis-wang/codex-agent-sdk-dotnet/blob/main/docs/comparison-with-official-sdks.zh-TW.md)在 codex-agent-sdk-dotnet repo。
@@ -17,8 +17,8 @@
 1. **定位是互動式 client 的子集移植**：.NET 版對應 Python 的 `ClaudeSDKClient`（連線、送訊息、收回覆、批准工具、中斷、接續 session），沒有一次性的 `query()` 函式，也沒有公開的自訂 Transport。
 2. **選項涵蓋約四分之一**：Python `ClaudeAgentOptions` 有 49 個欄位、TypeScript `Options` 有 69 個；.NET `ClaudeAgentOptions` 有 17 個，集中在對話本身最常用的部分。沒有專屬選項的 CLI 旗標可以用 `ExtraArguments` 帶。
 3. **刻意不做的四塊**：hook 回呼、SDK 內的 MCP server（自訂工具）、session store、transcript mirror。README 已寫明不在範圍內。
-4. **比官方多的地方**：`ApplyFlagSettingsAsync`（Python 沒有，照 TS 協定）、`SetModelAsync` 回傳完整模型 ID、`WarningCallback`、每則訊息保留 `Raw` 且不丟掉不認得的訊息（Python 直接略過）、Windows 拒絕執行 `.cmd`、AOT 相容。
-5. **測試比較紮實**：210 個測試，含從真實 CLI 錄下來的協定樣本（`Fixtures/*.jsonl`）與假 CLI 子程序測試。
+4. **比官方多的地方**：`ApplyFlagSettingsAsync`（Python 沒有，照 TS 協定）、`SetModelAsync` 回傳完整模型 ID、`GetContextUsageAsync` 的 `detail`、`WarningCallback`、每則訊息保留 `Raw` 且不丟掉不認得的訊息（Python 直接略過）、Windows 拒絕執行 `.cmd`、AOT 相容。
+5. **測試比較紮實**：223 個測試，含從真實 CLI 錄下來的協定樣本（`Fixtures/*.jsonl`）與假 CLI 子程序測試。
 6. **授權**：Python 是 MIT，可以移植；TypeScript 是專有授權（© Anthropic），.NET 版只參考它送出的協定格式，沒有移植程式碼。
 
 ## 功能矩陣
@@ -86,7 +86,7 @@
 | **背景任務** | ✅ `stop_task()`、`Task*Message` | ✅ `stopTask()`、`backgroundTasks()` | 🟡 以 `SystemMessage` 收到，內容從 `Raw` 讀 |
 | **沙箱設定** | ✅ `sandbox` | ✅ `sandbox` | ❌ |
 | **設定來源 / plugins / skills** | ✅ `setting_sources`、`settings`、`plugins`、`skills` | ✅ `settingSources`、`managedSettings`、`plugins`、`reloadPlugins()` | ❌ |
-| **Context 用量** | ✅ `get_context_usage()` | ✅ `getContextUsage()` | ❌ |
+| **Context 用量** | ✅ `get_context_usage()` | ✅ `getContextUsage()`，可選 `detail: 'summary' \| 'full'` | ⭐ `GetContextUsageAsync`，回傳型別化的 `ContextUsage`（含 Python 型別沒有的類別 `id`、`kind`）；`detail` 照 TS |
 
 ### 訊息與錯誤
 
@@ -102,10 +102,10 @@
 
 | 項目 | 官方 Python | 官方 TypeScript | .NET |
 |---|---|---|---|
-| 程式碼 | 約 13,500 行 Python | 封裝成 bundle，型別定義 `sdk.d.ts` 約 10,500 行 | 手寫約 2,690 行 C#（48 個檔案） |
-| 公開的 client 方法 | `ClaudeSDKClient` 15 個 | `Query` 31 個 | `ClaudeAgentClient` 7 個非同步方法 |
+| 程式碼 | 約 13,500 行 Python | 封裝成 bundle，型別定義 `sdk.d.ts` 約 10,500 行 | 手寫約 2,940 行 C#（54 個檔案） |
+| 公開的 client 方法 | `ClaudeSDKClient` 15 個 | `Query` 31 個 | `ClaudeAgentClient` 8 個非同步方法 |
 | 選項數 | 49 | 69 | 17 |
-| 測試 | pytest | 未公開 | 210 個（xUnit），含真實 CLI 錄下的協定樣本與假 CLI 子程序 |
+| 測試 | pytest | 未公開 | 223 個（xUnit），含真實 CLI 錄下的協定樣本與假 CLI 子程序 |
 | 授權 | MIT | 專有（© Anthropic） | MIT，NOTICE 保留 Python SDK 的授權聲明 |
 | AOT | — | — | `IsAotCompatible` |
 

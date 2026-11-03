@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using PamisWang.ClaudeAgentSdk.Messages;
 using PamisWang.ClaudeAgentSdk.Permissions;
@@ -168,6 +169,42 @@ public sealed class ClaudeAgentClientTests : IDisposable
     }
 
     [Fact]
+    public async Task GetContextUsageAsync_RecordedBeforeAndAfterTurn_ParsesUsage()
+    {
+        var fixture = ProtocolFixture.Load("context_usage");
+        await using var client = new ClaudeAgentClient(new ClaudeAgentOptions(), new ReplayTransport(fixture));
+        await client.ConnectAsync();
+
+        // 重播會比對送出的 request：不指定 detail 時不帶這個欄位，跟 Python SDK 一樣
+        var before = await client.GetContextUsageAsync();
+        await client.SendAsync(fixture.UserPrompts[0]);
+        await CollectAsync(client.ReceiveResponseAsync());
+        var after = await client.GetContextUsageAsync(ContextUsageDetail.Summary);
+
+        Assert.Equal("claude-haiku-5-5", before.Model);
+        Assert.Equal(16410, before.TotalTokens);
+        Assert.Equal(1_000_000, before.MaxTokens);
+        Assert.Equal(1_000_000, before.RawMaxTokens);
+        Assert.Equal(2, before.Percentage);
+        Assert.True(before.IsAutoCompactEnabled);
+        Assert.Equal(967_000, before.AutoCompactThreshold);
+        Assert.Equal(before.Raw.GetProperty("categories").GetArrayLength(), before.Categories.Count);
+        var deferred = before.Categories.Single(category => category.Id == "system_tools_deferred");
+        Assert.Equal("deferred", deferred.Kind);
+        Assert.True(deferred.IsDeferred);
+        Assert.Equal("free", before.Categories.Single(category => category.Id == "free_space").Kind);
+        Assert.All(before.Categories.Where(category => category.Kind != "deferred"), category => Assert.False(category.IsDeferred));
+        // 錄製時不載入使用者設定與 MCP，這些都是空的
+        Assert.Empty(before.MemoryFiles);
+        Assert.Empty(before.McpTools);
+        Assert.Empty(before.Agents);
+        // 沒有對應屬性的欄位從 Raw 讀；說過話之後才有 API 的用量
+        Assert.Equal(JsonValueKind.Null, before.Raw.GetProperty("apiUsage").ValueKind);
+        Assert.Equal(JsonValueKind.Object, after.Raw.GetProperty("apiUsage").ValueKind);
+        Assert.True(after.TotalTokens > before.TotalTokens);
+    }
+
+    [Fact]
     public async Task SendAsync_BeforeConnect_ThrowsCliConnectionException()
     {
         await using var client = new ClaudeAgentClient(new ClaudeAgentOptions(), new ScriptedTransport());
@@ -191,6 +228,7 @@ public sealed class ClaudeAgentClientTests : IDisposable
         await Assert.ThrowsAsync<ObjectDisposedException>(() => client.InterruptAsync());
         await Assert.ThrowsAsync<ObjectDisposedException>(() => client.SetModelAsync("sonnet"));
         await Assert.ThrowsAsync<ObjectDisposedException>(() => client.ApplyFlagSettingsAsync(new JsonObject { ["effortLevel"] = "low" }));
+        await Assert.ThrowsAsync<ObjectDisposedException>(() => client.GetContextUsageAsync());
         await Assert.ThrowsAsync<ObjectDisposedException>(() => client.ConnectAsync());
     }
 

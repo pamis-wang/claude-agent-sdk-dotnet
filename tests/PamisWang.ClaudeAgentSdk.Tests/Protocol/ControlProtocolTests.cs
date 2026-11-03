@@ -118,6 +118,31 @@ public sealed class ControlProtocolTests : IAsyncLifetime, IAsyncDisposable
         Assert.Equal(expectedRequest, request.GetProperty("request").GetRawText());
     }
 
+    [Theory]
+    [InlineData(null, """{"subtype":"get_context_usage"}""")]
+    [InlineData(ContextUsageDetail.Full, """{"subtype":"get_context_usage","detail":"full"}""")]
+    [InlineData(ContextUsageDetail.Summary, """{"subtype":"get_context_usage","detail":"summary"}""")]
+    public async Task GetContextUsageAsync_SendsDetailOnlyWhenGiven(ContextUsageDetail? detail, string expectedRequest)
+    {
+        var protocol = Start();
+
+        var querying = protocol.GetContextUsageAsync(detail);
+        var request = await _transport.NextWriteAsync();
+        RespondSuccess(request);
+        await querying.WaitAsync(Timeout);
+
+        Assert.Equal(expectedRequest, request.GetProperty("request").GetRawText());
+    }
+
+    [Fact]
+    public async Task GetContextUsageAsync_UndefinedDetail_ThrowsWithoutSending()
+    {
+        var protocol = Start();
+
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => protocol.GetContextUsageAsync((ContextUsageDetail)42));
+        Assert.True(_transport.HasNoPendingWrites);
+    }
+
     [Fact]
     public async Task ApplyFlagSettingsAsync_SendsSettingsKeepingNullsThatClearKeys()
     {

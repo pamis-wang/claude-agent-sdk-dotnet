@@ -7,7 +7,7 @@ How `PamisWang.ClaudeAgentSdk` compares with Anthropic's official Claude Agent S
 - Surveyed: 2026-11-03
 - Official Python: claude-agent-sdk 0.2.177 (8abce11)
 - Official TypeScript: @anthropic-ai/claude-agent-sdk 0.3.317
-- .NET: PamisWang.ClaudeAgentSdk 0.1.0-preview.8
+- .NET: PamisWang.ClaudeAgentSdk 0.1.0-preview.8, plus the unreleased `GetContextUsageAsync`
 - The .NET package tracks Python 0.2.174; 0.2.175 and 0.2.176 only update the bundled Claude CLI (2.1.314, 2.1.316), and 0.2.177 bundles CLI 2.1.317 and adds `HookMatcher.on_failure`, part of the hooks the .NET package leaves out on purpose. None of the APIs the .NET package uses changed, so features are compared against the latest release. TypeScript columns are based on the `sdk.d.ts` types in the package.
 
 Related: [Claude .NET vs Codex .NET](claude-vs-codex-dotnet.md). The [comparison of Codex .NET with the official SDKs](https://github.com/pamis-wang/codex-agent-sdk-dotnet/blob/main/docs/comparison-with-official-sdks.md) is in the codex-agent-sdk-dotnet repo.
@@ -17,8 +17,8 @@ Related: [Claude .NET vs Codex .NET](claude-vs-codex-dotnet.md). The [comparison
 1. **A port of the interactive client**: The .NET package covers Python's `ClaudeSDKClient` (connect, send, receive, approve tools, interrupt, resume sessions); there is no one-shot `query()` function and no public custom transport.
 2. **About a quarter of the options**: Python's `ClaudeAgentOptions` has 49 fields and TypeScript's `Options` has 69; the .NET `ClaudeAgentOptions` has 17, focused on what conversations use most. CLI flags without a dedicated option can be passed through `ExtraArguments`.
 3. **Four areas left out on purpose**: Hook callbacks, in-SDK MCP servers (custom tools), session stores, and transcript mirroring. The README lists them as not planned.
-4. **What it adds**: `ApplyFlagSettingsAsync` (missing from Python, follows the TypeScript protocol), `SetModelAsync` returning the full model ID, `WarningCallback`, `Raw` on every message with unrecognized messages kept (Python drops them), refusing `.cmd` on Windows, and AOT compatibility.
-5. **Thorough tests**: 210 tests, including protocol fixtures recorded from the real CLI (`Fixtures/*.jsonl`) and tests against a fake CLI subprocess.
+4. **What it adds**: `ApplyFlagSettingsAsync` (missing from Python, follows the TypeScript protocol), `SetModelAsync` returning the full model ID, the `detail` option of `GetContextUsageAsync`, `WarningCallback`, `Raw` on every message with unrecognized messages kept (Python drops them), refusing `.cmd` on Windows, and AOT compatibility.
+5. **Thorough tests**: 223 tests, including protocol fixtures recorded from the real CLI (`Fixtures/*.jsonl`) and tests against a fake CLI subprocess.
 6. **Licensing**: Python is MIT and can be ported; TypeScript is proprietary (© Anthropic), so the .NET package only follows the protocol messages it sends and ports none of its code.
 
 ## Feature matrix
@@ -86,7 +86,7 @@ A ❌ for a feature that is only a CLI flag (such as `--add-dir` or `--permissio
 | **Background tasks** | ✅ `stop_task()`, `Task*Message` | ✅ `stopTask()`, `backgroundTasks()` | 🟡 arrive as `SystemMessage`; read the details from `Raw` |
 | **Sandbox settings** | ✅ `sandbox` | ✅ `sandbox` | ❌ |
 | **Setting sources / plugins / skills** | ✅ `setting_sources`, `settings`, `plugins`, `skills` | ✅ `settingSources`, `managedSettings`, `plugins`, `reloadPlugins()` | ❌ |
-| **Context usage** | ✅ `get_context_usage()` | ✅ `getContextUsage()` | ❌ |
+| **Context usage** | ✅ `get_context_usage()` | ✅ `getContextUsage()`, with `detail: 'summary' \| 'full'` | ⭐ `GetContextUsageAsync` returning a typed `ContextUsage` (including the category `id` and `kind` that Python's types lack); `detail` follows TS |
 
 ### Messages and errors
 
@@ -102,10 +102,10 @@ A ❌ for a feature that is only a CLI flag (such as `--add-dir` or `--permissio
 
 | Item | Official Python | Official TypeScript | .NET |
 |---|---|---|---|
-| Code | about 13,500 lines of Python | shipped as a bundle; the `sdk.d.ts` types are about 10,500 lines | about 2,690 hand-written lines of C# (48 files) |
-| Public client methods | 15 on `ClaudeSDKClient` | 31 on `Query` | 7 async methods on `ClaudeAgentClient` |
+| Code | about 13,500 lines of Python | shipped as a bundle; the `sdk.d.ts` types are about 10,500 lines | about 2,940 hand-written lines of C# (54 files) |
+| Public client methods | 15 on `ClaudeSDKClient` | 31 on `Query` | 8 async methods on `ClaudeAgentClient` |
 | Options | 49 | 69 | 17 |
-| Tests | pytest | not published | 210 (xUnit), including fixtures recorded from the real CLI and a fake CLI subprocess |
+| Tests | pytest | not published | 223 (xUnit), including fixtures recorded from the real CLI and a fake CLI subprocess |
 | License | MIT | proprietary (© Anthropic) | MIT, with the Python SDK's notice kept in NOTICE |
 | AOT | — | — | `IsAotCompatible` |
 

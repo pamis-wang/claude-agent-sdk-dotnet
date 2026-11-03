@@ -30,6 +30,7 @@ Claude Code CLI 的 stream-json 收發紀錄，給單元測試用假的 transpor
 | `interrupt_during_permission.jsonl` | 等權限回覆時中斷 |
 | `set_model.jsonl` | 對話中途換模型（`set_model`）再說一句，最後換回預設（`model` 是 `null`） |
 | `apply_flag_settings.jsonl` | 對話中途改思考深度（`apply_flag_settings`）再說一句，最後清掉；Python SDK 沒有公開的方法，腳本直接用它內部送 control request 的函式 |
+| `context_usage.jsonl` | 查 context 用量（`get_context_usage`）：還沒說話時不帶 `detail`，說一句之後帶 `detail: summary`；Python SDK 的方法沒有 `detail` 參數，第二次直接送 control request |
 
 ## 錄製條件
 

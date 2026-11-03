@@ -10,7 +10,7 @@ using PamisWang.ClaudeAgentSdk.Transport;
 namespace PamisWang.ClaudeAgentSdk.Protocol;
 
 /// <summary>
-/// 在 transport 上跑 control 協定：初始化握手、讀取迴圈分流、回覆 CLI 的權限詢問、送出中斷、換模型與套用設定。
+/// 在 transport 上跑 control 協定：初始化握手、讀取迴圈分流、回覆 CLI 的權限詢問、送出中斷、換模型、套用設定與查 context 用量。
 /// 對應 Python SDK 的 <c>Query</c> 裡互動式 client 用到的部分；
 /// 一次性 <c>query()</c> 用來判斷何時關 stdin 的 run 生命週期（session state、上限計時）不在這裡，互動式的 stdin 只在關閉時才關。
 /// </summary>
@@ -83,6 +83,20 @@ internal sealed class ControlProtocol : IAsyncDisposable
             {
                 writer.WritePropertyName("settings");
                 settings.WriteTo(writer);
+            },
+            DefaultRequestTimeout,
+            cancellationToken);
+
+    /// <summary>查目前 context window 的用量；<paramref name="detail"/> 是 <see langword="null"/> 時不帶 <c>detail</c>，跟 Python SDK 送的一樣。</summary>
+    public Task<JsonElement> GetContextUsageAsync(ContextUsageDetail? detail, CancellationToken cancellationToken = default) =>
+        SendControlRequestAsync(
+            "get_context_usage",
+            detail switch
+            {
+                null => null,
+                ContextUsageDetail.Full => writer => writer.WriteString("detail", "full"),
+                ContextUsageDetail.Summary => writer => writer.WriteString("detail", "summary"),
+                _ => throw new ArgumentOutOfRangeException(nameof(detail), detail, "不是 ContextUsageDetail 定義的值。"),
             },
             DefaultRequestTimeout,
             cancellationToken);
