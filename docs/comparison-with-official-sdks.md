@@ -7,7 +7,7 @@ How `PamisWang.ClaudeAgentSdk` compares with Anthropic's official Claude Agent S
 - Surveyed: 2026-11-03
 - Official Python: claude-agent-sdk 0.2.177 (8abce11)
 - Official TypeScript: @anthropic-ai/claude-agent-sdk 0.3.317
-- .NET: PamisWang.ClaudeAgentSdk 0.1.0-preview.7
+- .NET: PamisWang.ClaudeAgentSdk 0.1.0-preview.7, plus the unreleased `MaxTurns`, `MaxBudgetUsd`, and `OutputSchema`
 - The .NET package tracks Python 0.2.174; 0.2.175 and 0.2.176 only update the bundled Claude CLI (2.1.314, 2.1.316), and 0.2.177 bundles CLI 2.1.317 and adds `HookMatcher.on_failure`, part of the hooks the .NET package leaves out on purpose. None of the APIs the .NET package uses changed, so features are compared against the latest release. TypeScript columns are based on the `sdk.d.ts` types in the package.
 
 Related: [Claude .NET vs Codex .NET](claude-vs-codex-dotnet.md). The [comparison of Codex .NET with the official SDKs](https://github.com/pamis-wang/codex-agent-sdk-dotnet/blob/main/docs/comparison-with-official-sdks.md) is in the codex-agent-sdk-dotnet repo.
@@ -15,17 +15,17 @@ Related: [Claude .NET vs Codex .NET](claude-vs-codex-dotnet.md). The [comparison
 ## Key points
 
 1. **A port of the interactive client**: The .NET package covers Python's `ClaudeSDKClient` (connect, send, receive, approve tools, interrupt, resume sessions); there is no one-shot `query()` function and no public custom transport.
-2. **About a quarter of the options**: Python's `ClaudeAgentOptions` has 49 fields and TypeScript's `Options` has 69; the .NET `ClaudeAgentOptions` has 14, focused on what conversations use most. CLI flags without a dedicated option can be passed through `ExtraArguments`.
+2. **About a quarter of the options**: Python's `ClaudeAgentOptions` has 49 fields and TypeScript's `Options` has 69; the .NET `ClaudeAgentOptions` has 17, focused on what conversations use most. CLI flags without a dedicated option can be passed through `ExtraArguments`.
 3. **Four areas left out on purpose**: Hook callbacks, in-SDK MCP servers (custom tools), session stores, and transcript mirroring. The README lists them as not planned.
 4. **What it adds**: `ApplyFlagSettingsAsync` (missing from Python, follows the TypeScript protocol), `SetModelAsync` returning the full model ID, `WarningCallback`, `Raw` on every message with unrecognized messages kept (Python drops them), refusing `.cmd` on Windows, and AOT compatibility.
-5. **Thorough tests**: 203 tests, including protocol fixtures recorded from the real CLI (`Fixtures/*.jsonl`) and tests against a fake CLI subprocess.
+5. **Thorough tests**: 210 tests, including protocol fixtures recorded from the real CLI (`Fixtures/*.jsonl`) and tests against a fake CLI subprocess.
 6. **Licensing**: Python is MIT and can be ported; TypeScript is proprietary (© Anthropic), so the .NET package only follows the protocol messages it sends and ports none of its code.
 
 ## Feature matrix
 
 Legend: ✅ Supported, ⭐ Extra, 🟡 Partial, ❌ No, — N/A (⭐ marks what goes beyond the official SDKs)
 
-A ❌ for a feature that is only a CLI flag (such as `--max-turns` or `--add-dir`) means .NET has no dedicated option for it; the flag can still be passed through `ExtraArguments`.
+A ❌ for a feature that is only a CLI flag (such as `--add-dir` or `--permission-mode`) means .NET has no dedicated option for it; the flag can still be passed through `ExtraArguments`.
 
 ### Entry points and connection
 
@@ -54,8 +54,8 @@ A ❌ for a feature that is only a CLI flag (such as `--max-turns` or `--add-dir
 | **Session store / transcript mirror** | ✅ `session_store`, `InMemorySessionStore` | ✅ `sessionStore` | ❌ not planned |
 | **Interrupt** | ✅ `interrupt()` | ✅ `interrupt()` | ✅ `InterruptAsync`; pending permission prompts get their token cancelled |
 | **Partial message streaming** | ✅ `include_partial_messages` | ✅ `includePartialMessages` | ⭐ `IncludePartialMessages`, plus `StreamEvent.TextDelta` for the text |
-| **Turn / budget limits** | ✅ `max_turns`, `max_budget_usd`, `task_budget` | ✅ `maxTurns`, `maxBudgetUsd`, `taskBudget` | ❌ |
-| **Structured output** | ✅ `output_format` | ✅ `outputFormat` | 🟡 `ResultMessage.StructuredOutput` is readable, but there is no option to request a schema |
+| **Turn / budget limits** | ✅ `max_turns`, `max_budget_usd`, `task_budget` | ✅ `maxTurns`, `maxBudgetUsd`, `taskBudget` | 🟡 `MaxTurns`, `MaxBudgetUsd` (a `decimal` amount); no task budget |
+| **Structured output** | ✅ `output_format` | ✅ `outputFormat` | ✅ `OutputSchema` (a `JsonObject`); the result is in `ResultMessage.StructuredOutput` |
 | **File checkpoints / rewind** | ✅ `enable_file_checkpointing`, `rewind_files` | ✅ `enableFileCheckpointing`, `rewindFiles` | ❌ |
 
 ### Models and prompts
@@ -102,16 +102,16 @@ A ❌ for a feature that is only a CLI flag (such as `--max-turns` or `--add-dir
 
 | Item | Official Python | Official TypeScript | .NET |
 |---|---|---|---|
-| Code | about 13,500 lines of Python | shipped as a bundle; the `sdk.d.ts` types are about 10,500 lines | about 2,620 hand-written lines of C# (48 files) |
+| Code | about 13,500 lines of Python | shipped as a bundle; the `sdk.d.ts` types are about 10,500 lines | about 2,690 hand-written lines of C# (48 files) |
 | Public client methods | 15 on `ClaudeSDKClient` | 31 on `Query` | 7 async methods on `ClaudeAgentClient` |
-| Options | 49 | 69 | 14 |
-| Tests | pytest | not published | 203 (xUnit), including fixtures recorded from the real CLI and a fake CLI subprocess |
+| Options | 49 | 69 | 17 |
+| Tests | pytest | not published | 210 (xUnit), including fixtures recorded from the real CLI and a fake CLI subprocess |
 | License | MIT | proprietary (© Anthropic) | MIT, with the Python SDK's notice kept in NOTICE |
 | AOT | — | — | `IsAotCompatible` |
 
 ## Suggested next steps
 
-- Turn the most requested CLI flags into typed options: `AllowedTools`, `PermissionMode`, `MaxTurns`, `AddDirectories`, and `OutputFormat`. All of them can already go through `ExtraArguments`; dedicated options add type checking and documentation. `SetPermissionModeAsync` is a control request, not a flag, so it still needs its own method.
+- Turn the most requested CLI flags into typed options: `AllowedTools`, `PermissionMode`, and `AddDirectories`. All of them can already go through `ExtraArguments`; dedicated options add type checking and documentation. `SetPermissionModeAsync` is a control request, not a flag, so it still needs its own method.
 - `ForkSession` and `ContinueConversation` are just CLI arguments and quick to add; the session-listing functions need to read `~/.claude/projects` and take more work.
 - Background task messages such as `TaskStarted` can only be read from `SystemMessage.Raw` today; they could get dedicated types.
 - Keep hooks and in-SDK MCP servers out unless there is a clear need; they require the two-way control protocol and a JSON-RPC bridge, the most complex parts.

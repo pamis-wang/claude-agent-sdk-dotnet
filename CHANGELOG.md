@@ -1,5 +1,19 @@
 # Changelog
 
+## 未發佈
+
+- `ClaudeAgentOptions.MaxTurns`：模型來回次數的上限（`--max-turns`），每次送出訊息各自計算；超過時 `ResultMessage.Subtype` 是 `error_max_turns`。
+- `ClaudeAgentOptions.MaxBudgetUsd`：API 費用的上限，單位美元（`--max-budget-usd`），整個 session 累計；每次呼叫完 API 才檢查，
+  超過時 `Subtype` 是 `error_max_budget_usd`，之後的訊息也直接這樣結束。Python 是 `float`，這裡是金額，用 `decimal`。
+- 這兩個都必須大於 0，否則 `ConnectAsync` 丟 `ArgumentOutOfRangeException`。Python 遇到 0 會略過旗標、負數照送
+  （送出 `-` 開頭、會被 CLI 當成另一個旗標的值）。數字照 InvariantCulture 寫，小數點是逗號的語系也送出 `1.25`。
+- `ClaudeAgentOptions.OutputSchema`：結構化輸出的 JSON Schema（`--json-schema`，`JsonObject`），結果在 `ResultMessage.StructuredOutput`。
+  對應 Python 的 `output_format`；Python 要寫成 `{"type": "json_schema", "schema": ...}`，目前只有這一種，所以這裡直接放 schema。
+- CLI 參數的順序跟 Python 一樣：`--max-turns`、`--max-budget-usd` 在 `--disallowedTools` 前面，`--json-schema` 在 `--effort` 後面。
+- `ResultMessage.Subtype` 的說明補上 `error_max_budget_usd`、`error_max_structured_output_retries`；
+  `TotalCostUsd` 的說明註明是整個 session 累計的費用。
+- 以上行為用 CLI 2.1.309 與 haiku 實測過：結構化輸出是模型呼叫 `StructuredOutput` 工具交出結果，簡單的問題也用了 3 次模型來回。
+
 ## 0.1.0-preview.7（2026-11-03）
 
 - `ClaudeAgentOptions.ExtraArguments`：額外的 CLI 參數，給還沒有專屬屬性的旗標用（例如 `max-turns`、`add-dir`、`mcp-config`），

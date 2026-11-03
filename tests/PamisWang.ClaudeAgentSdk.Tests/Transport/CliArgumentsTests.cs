@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text.Json.Nodes;
 using PamisWang.ClaudeAgentSdk.Permissions;
 using PamisWang.ClaudeAgentSdk.Transport;
 
@@ -127,6 +129,99 @@ public sealed class CliArgumentsTests
                 "--model", "haiku",
                 "--include-partial-messages",
                 "--effort", "low",
+                "--input-format", "stream-json",
+            ],
+            args);
+    }
+
+    [Fact]
+    public void Build_Limits_ComeBeforeDisallowedToolsLikePythonSdk()
+    {
+        var options = new ClaudeAgentOptions
+        {
+            Model = "haiku",
+            MaxTurns = 3,
+            MaxBudgetUsd = 0.5m,
+            DisallowedTools = ["Bash"],
+        };
+
+        var args = CliArguments.Build(options, isWindows: false);
+
+        Assert.Equal(
+            [
+                "--output-format", "stream-json", "--verbose", "--system-prompt", "",
+                "--max-turns", "3",
+                "--max-budget-usd", "0.5",
+                "--disallowedTools", "Bash",
+                "--model", "haiku",
+                "--input-format", "stream-json",
+            ],
+            args);
+    }
+
+    [Fact]
+    public void Build_MaxBudgetUsd_IgnoresCurrentCulture()
+    {
+        var original = CultureInfo.CurrentCulture;
+        try
+        {
+            // 德文的小數點是逗號，照目前語系寫會送出 1,25
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("de-DE");
+
+            var args = CliArguments.Build(new ClaudeAgentOptions { MaxBudgetUsd = 1.25m }, isWindows: false);
+
+            Assert.Equal("1.25", args[args.ToList().IndexOf("--max-budget-usd") + 1]);
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = original;
+        }
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void Build_NonPositiveMaxTurns_Throws(int maxTurns)
+    {
+        // Python 遇到 0 會略過這個旗標，負數則送出 - 開頭、會被當成另一個旗標的值
+        var options = new ClaudeAgentOptions { MaxTurns = maxTurns };
+
+        var exception = Assert.Throws<ArgumentOutOfRangeException>(() => CliArguments.Build(options, isWindows: false));
+        Assert.Equal(nameof(ClaudeAgentOptions.MaxTurns), exception.ParamName);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-0.01)]
+    public void Build_NonPositiveMaxBudgetUsd_Throws(double maxBudgetUsd)
+    {
+        var options = new ClaudeAgentOptions { MaxBudgetUsd = (decimal)maxBudgetUsd };
+
+        var exception = Assert.Throws<ArgumentOutOfRangeException>(() => CliArguments.Build(options, isWindows: false));
+        Assert.Equal(nameof(ClaudeAgentOptions.MaxBudgetUsd), exception.ParamName);
+    }
+
+    [Fact]
+    public void Build_OutputSchema_ComesAfterEffortAsOneJsonArgument()
+    {
+        var options = new ClaudeAgentOptions
+        {
+            Effort = "low",
+            OutputSchema = new JsonObject
+            {
+                ["type"] = "object",
+                ["properties"] = new JsonObject { ["answer"] = new JsonObject { ["type"] = "string" } },
+                ["required"] = new JsonArray("answer"),
+            },
+        };
+
+        var args = CliArguments.Build(options, isWindows: true);
+
+        Assert.Equal(
+            [
+                "--output-format", "stream-json", "--verbose", "--system-prompt", "",
+                "--effort", "low",
+                "--json-schema", """{"type":"object","properties":{"answer":{"type":"string"}},"required":["answer"]}""",
                 "--input-format", "stream-json",
             ],
             args);
