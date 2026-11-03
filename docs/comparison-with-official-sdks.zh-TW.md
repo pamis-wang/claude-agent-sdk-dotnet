@@ -4,11 +4,11 @@
 
 對照 `PamisWang.ClaudeAgentSdk` 與 Anthropic 官方的 Claude Agent SDK（Python、TypeScript），看移植涵蓋了哪些功能、刻意不做哪些、又多了什麼。
 
-- 調查日期：2026-11-01
-- 官方 Python：claude-agent-sdk 0.2.176（2146f9d）
-- 官方 TypeScript：@anthropic-ai/claude-agent-sdk 0.3.316
-- .NET：PamisWang.ClaudeAgentSdk 0.1.0-preview.5（52ec29e）
-- .NET 版對照 Python 0.2.174；0.2.175、0.2.176 只更新打包的 Claude CLI（2.1.314、2.1.316），API 沒有變動，所以功能面仍以最新版對照。TypeScript 欄位依套件內的 `sdk.d.ts` 型別判斷。
+- 調查日期：2026-11-03
+- 官方 Python：claude-agent-sdk 0.2.177（8abce11）
+- 官方 TypeScript：@anthropic-ai/claude-agent-sdk 0.3.317
+- .NET：PamisWang.ClaudeAgentSdk 0.1.0-preview.6（002066b）
+- .NET 版對照 Python 0.2.174；0.2.175、0.2.176 只更新打包的 Claude CLI（2.1.314、2.1.316）；0.2.177 打包 CLI 2.1.317，新增的 `HookMatcher.on_failure` 屬於 .NET 刻意不做的 hook。.NET 用到的 API 都沒有變動，所以功能面仍以最新版對照。TypeScript 欄位依套件內的 `sdk.d.ts` 型別判斷。
 
 相關文件：[Claude .NET vs Codex .NET](claude-vs-codex-dotnet.zh-TW.md)。[Codex .NET 與官方 SDK 的對照](https://github.com/pamis-wang/codex-agent-sdk-dotnet/blob/main/docs/comparison-with-official-sdks.zh-TW.md)在 codex-agent-sdk-dotnet repo。
 
@@ -27,7 +27,7 @@
 
 ### 進入點與連線
 
-| 功能 | 官方 Python（claude-agent-sdk 0.2.176） | 官方 TypeScript（claude-agent-sdk 0.3.316） | .NET（PamisWang.ClaudeAgentSdk） |
+| 功能 | 官方 Python（claude-agent-sdk 0.2.177） | 官方 TypeScript（claude-agent-sdk 0.3.317） | .NET（PamisWang.ClaudeAgentSdk） |
 |---|---|---|---|
 | **一次性查詢** | ✅ `query(prompt, options)`，prompt 可以是字串或非同步串流 | ✅ `query({ prompt, options })` | ❌ 改用 `ClaudeAgentClient` |
 | **互動式 client** | ✅ `ClaudeSDKClient`：`connect`、`query`、`receive_response`、`disconnect` | 🟡 `query()` 回傳的 `Query` 物件，加上 `streamInput` | ✅ `ClaudeAgentClient`：`ConnectAsync`、`SendAsync`、`ReceiveResponseAsync`、`DisposeAsync` |
@@ -43,7 +43,7 @@
 
 ### 對話與 session
 
-| 功能 | 官方 Python（claude-agent-sdk 0.2.176） | 官方 TypeScript（claude-agent-sdk 0.3.316） | .NET（PamisWang.ClaudeAgentSdk） |
+| 功能 | 官方 Python（claude-agent-sdk 0.2.177） | 官方 TypeScript（claude-agent-sdk 0.3.317） | .NET（PamisWang.ClaudeAgentSdk） |
 |---|---|---|---|
 | **接續 session** | ✅ `resume`、`continue_conversation`、`session_id`、`resume_session_at` | ✅ `resume`、`continue`、`sessionId`、`resumeSessionAt` | 🟡 `ResumeSessionId` |
 | **分岔 session** | ✅ `fork_session` 選項與函式 | ✅ `forkSession` | ❌ |
@@ -58,7 +58,7 @@
 
 ### 模型與提示詞
 
-| 功能 | 官方 Python（claude-agent-sdk 0.2.176） | 官方 TypeScript（claude-agent-sdk 0.3.316） | .NET（PamisWang.ClaudeAgentSdk） |
+| 功能 | 官方 Python（claude-agent-sdk 0.2.177） | 官方 TypeScript（claude-agent-sdk 0.3.317） | .NET（PamisWang.ClaudeAgentSdk） |
 |---|---|---|---|
 | **系統提示詞** | ✅ 字串、`SystemPromptPreset`、`SystemPromptCustom`、`SystemPromptFile` | ✅ `systemPrompt` | ✅ `SystemPromptPreset`、`SystemPromptCustom`、`SystemPromptFile` |
 | **模型** | ✅ `model`、`fallback_model` | ✅ `model`、`fallbackModel` | 🟡 `Model`（沒有備援模型） |
@@ -70,13 +70,13 @@
 
 ### 工具、權限與擴充
 
-| 功能 | 官方 Python（claude-agent-sdk 0.2.176） | 官方 TypeScript（claude-agent-sdk 0.3.316） | .NET（PamisWang.ClaudeAgentSdk） |
+| 功能 | 官方 Python（claude-agent-sdk 0.2.177） | 官方 TypeScript（claude-agent-sdk 0.3.317） | .NET（PamisWang.ClaudeAgentSdk） |
 |---|---|---|---|
 | **工具權限回呼** | ✅ `can_use_tool` | ✅ `canUseTool` | ✅ `CanUseTool`；回傳 `request.Suggestions` 即「一律允許」 |
 | **允許 / 停用工具** | ✅ `tools`、`allowed_tools`、`disallowed_tools` | ✅ `tools`、`allowedTools`、`disallowedTools`、`toolAliases` | 🟡 `DisallowedTools` |
 | **權限模式** | ✅ `permission_mode`、`set_permission_mode()` | ✅ `permissionMode`、`setPermissionMode()` | ❌ |
 | **權限提示工具** | ✅ `permission_prompt_tool_name` | ✅ `permissionPromptToolName` | ❌ |
-| **Hook 回呼** | ✅ `hooks`（`HookMatcher`，二十多種事件） | ✅ `hooks` | ❌ 刻意不做 |
+| **Hook 回呼** | ✅ `hooks`（`HookMatcher`，二十多種事件；`on_failure` 決定回呼失敗時要不要擋下動作） | ✅ `hooks`（matcher 可設 `onFailure`） | ❌ 刻意不做 |
 | **SDK 內 MCP server** | ✅ `create_sdk_mcp_server`、`@tool` | ✅ `createSdkMcpServer`、`tool` | ❌ 刻意不做 |
 | **外部 MCP server** | ✅ `mcp_servers`、`strict_mcp_config` | ✅ `mcpServers`、`setMcpServers()` | ❌ |
 | **MCP 狀態 / 重連 / 開關** | ✅ `get_mcp_status`、`reconnect_mcp_server`、`toggle_mcp_server` | ✅ `mcpServerStatus()`、`reconnectMcpServer()`、`toggleMcpServer()`、`readMcpResource()` | ❌ |
@@ -88,9 +88,9 @@
 
 ### 訊息與錯誤
 
-| 功能 | 官方 Python（claude-agent-sdk 0.2.176） | 官方 TypeScript（claude-agent-sdk 0.3.316） | .NET（PamisWang.ClaudeAgentSdk） |
+| 功能 | 官方 Python（claude-agent-sdk 0.2.177） | 官方 TypeScript（claude-agent-sdk 0.3.317） | .NET（PamisWang.ClaudeAgentSdk） |
 |---|---|---|---|
-| **主要訊息型別** | ✅ User、Assistant、System、Result、StreamEvent、RateLimitEvent 等 | ✅ `SDKMessage` 共 39 種 | ✅ `UserMessage`、`AssistantMessage`、`SystemMessage`、`ResultMessage`、`StreamEvent`、`RateLimitEvent`、`ConversationResetMessage` |
+| **主要訊息型別** | ✅ User、Assistant、System、Result、StreamEvent、RateLimitEvent 等 | ✅ `SDKMessage` 共 40 種 | ✅ `UserMessage`、`AssistantMessage`、`SystemMessage`、`ResultMessage`、`StreamEvent`、`RateLimitEvent`、`ConversationResetMessage` |
 | **內容區塊** | ✅ Text、Thinking、ToolUse、ToolResult、ServerToolUse、ServerToolResult | ✅ | ✅ 同 Python，另有 `UnknownContentBlock` |
 | **不認得的訊息** | 🟡 直接略過（只記 debug log） | — 型別定義看不出來 | ⭐ `UnknownMessage`，不丟掉 |
 | **保留原始 JSON** | ❌ | ❌ | ⭐ 每則訊息與內容區塊都有 `Raw` |
@@ -100,7 +100,7 @@
 
 | 項目 | 官方 Python | 官方 TypeScript | .NET |
 |---|---|---|---|
-| 程式碼 | 約 13,500 行 Python | 封裝成 bundle，型別定義 `sdk.d.ts` 約 10,400 行 | 手寫約 2,560 行 C#（48 個檔案） |
+| 程式碼 | 約 13,500 行 Python | 封裝成 bundle，型別定義 `sdk.d.ts` 約 10,500 行 | 手寫約 2,560 行 C#（48 個檔案） |
 | 公開的 client 方法 | `ClaudeSDKClient` 15 個 | `Query` 31 個 | `ClaudeAgentClient` 7 個非同步方法 |
 | 選項數 | 49 | 69 | 13 |
 | 測試 | pytest | 未公開 | 190 個（xUnit），含真實 CLI 錄下的協定樣本與假 CLI 子程序 |
