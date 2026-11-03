@@ -1,6 +1,6 @@
 # Changelog
 
-## 未發佈
+## 0.1.0-preview.10（2026-11-03）
 
 補齊「對話與 session」與「工具、權限與擴充」兩塊：Python SDK 有的都有了，TypeScript SDK 才有的也照它送給 CLI 的格式補上，
 並用 Claude Code 2.1.312 實際跑過每一個選項與 control request。

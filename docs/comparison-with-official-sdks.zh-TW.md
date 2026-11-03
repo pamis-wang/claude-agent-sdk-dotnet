@@ -7,7 +7,7 @@
 - 調查日期：2026-11-03
 - 官方 Python：claude-agent-sdk 0.2.177（8abce11）
 - 官方 TypeScript：@anthropic-ai/claude-agent-sdk 0.3.317
-- .NET：PamisWang.ClaudeAgentSdk 0.1.0-preview.9，加上還沒發佈的「對話與 session」「工具、權限與擴充」補齊
+- .NET：PamisWang.ClaudeAgentSdk 0.1.0-preview.10
 - .NET 版對照 Python 0.2.174；0.2.175、0.2.176 只更新打包的 Claude CLI（2.1.314、2.1.316）；0.2.177 打包 CLI 2.1.317，新增的 `HookMatcher.on_failure` 屬於 .NET 還沒做的 hook。.NET 用到的 API 都沒有變動，所以功能面仍以最新版對照。TypeScript 欄位依套件內的 `sdk.d.ts` 型別判斷。
 
 相關文件：[Claude .NET vs Codex .NET](claude-vs-codex-dotnet.zh-TW.md)。[Codex .NET 與官方 SDK 的對照](https://github.com/pamis-wang/codex-agent-sdk-dotnet/blob/main/docs/comparison-with-official-sdks.zh-TW.md)在 codex-agent-sdk-dotnet repo。
