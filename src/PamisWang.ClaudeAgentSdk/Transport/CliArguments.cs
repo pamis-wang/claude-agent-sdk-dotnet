@@ -12,7 +12,10 @@ internal static class CliArguments
     private static readonly SearchValues<char> CmdExeMetacharacterValues = SearchValues.Create(CmdExeMetacharacters);
 
     /// <summary>組出參數，不含執行檔本身。</summary>
-    /// <exception cref="ArgumentException">Windows 上 <see cref="ClaudeAgentOptions.ResumeSessionId"/> 含有 cmd.exe 的特殊字元。</exception>
+    /// <exception cref="ArgumentException">
+    /// Windows 上 <see cref="ClaudeAgentOptions.ResumeSessionId"/> 含有 cmd.exe 的特殊字元，
+    /// 或 <see cref="ClaudeAgentOptions.ExtraArguments"/> 的旗標名稱不能用。
+    /// </exception>
     public static IReadOnlyList<string> Build(ClaudeAgentOptions options, bool isWindows)
     {
         List<string> args = ["--output-format", "stream-json", "--verbose"];
@@ -69,6 +72,26 @@ internal static class CliArguments
             args.Add("--include-partial-messages");
         }
 
+        // 跟 Python 一樣排在 --effort 前面。值不檢查 cmd.exe 的特殊字元：JSON 值一定有引號，
+        // 而且參數不經過 shell，Windows 上也不執行批次檔；Python 同樣不檢查
+        foreach (var (flag, value) in options.ExtraArguments)
+        {
+            RejectInvalidExtraFlag(nameof(options.ExtraArguments), flag, options.CanUseTool is not null);
+            if (value is null)
+            {
+                args.Add($"--{flag}");
+            }
+            else if (value.StartsWith('-'))
+            {
+                // 值可以省略的旗標，分成兩個參數時 - 開頭的值會被當成另一個旗標；寫成 = 一定綁在一起
+                args.Add($"--{flag}={value}");
+            }
+            else
+            {
+                args.AddRange([$"--{flag}", value]);
+            }
+        }
+
         if (options.Effort is not null)
         {
             args.AddRange(["--effort", options.Effort]);
@@ -76,6 +99,28 @@ internal static class CliArguments
 
         args.AddRange(["--input-format", "stream-json"]);
         return args;
+    }
+
+    /// <summary>
+    /// 擋下組不出正確參數的旗標名稱，以及這個套件自己要控制的旗標。Python 不檢查：
+    /// 例如 key 寫成 <c>--max-turns</c> 會送出 <c>----max-turns</c>，蓋掉 <c>output-format</c> 會讀不到 stream-json。
+    /// </summary>
+    private static void RejectInvalidExtraFlag(string optionName, string flag, bool hasCanUseTool)
+    {
+        var reason = flag switch
+        {
+            _ when string.IsNullOrWhiteSpace(flag) => "名稱是空的",
+            _ when flag.StartsWith('-') => "名稱不用加開頭的 --",
+            _ when flag.Contains('=') => "名稱不能含 =，值請放在 value",
+            "output-format" or "input-format" => "這個套件固定用 stream-json 跟 CLI 溝通，不能改",
+            "permission-prompt-tool" when hasCanUseTool => "設定了 CanUseTool 時，權限詢問固定走 stdio",
+            _ => null,
+        };
+
+        if (reason is not null)
+        {
+            throw new ArgumentException($"{optionName} 的旗標「{flag}」不能用：{reason}。", optionName);
+        }
     }
 
     /// <summary>

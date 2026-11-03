@@ -1,5 +1,14 @@
 # Changelog
 
+## 未發佈
+
+- `ClaudeAgentOptions.ExtraArguments`：額外的 CLI 參數，給還沒有專屬屬性的旗標用（例如 `max-turns`、`add-dir`、`mcp-config`），
+  對應 Python SDK 的 `extra_args`。key 是旗標名稱，不含 `--`；value 是 `null` 時只帶旗標。
+  跟 Python 一樣排在 `--effort` 前面，`-` 開頭的值寫成 `--旗標=值`。
+  Python 不檢查的這裡會丟 `ArgumentException`：旗標名稱是空的、以 `-` 開頭或含 `=`，以及這個套件自己控制的
+  `output-format`、`input-format`，還有設定 `CanUseTool` 時的 `permission-prompt-tool`。
+- `ConnectAsync` 的說明補上 `ArgumentException`：選項組不出 CLI 參數時丟出，原本 Windows 上 `ResumeSessionId` 含 cmd.exe 特殊字元就會丟。
+
 ## 0.1.0-preview.6（2026-11-01）
 
 - 函式庫沒有變更。重新發佈讓 NuGet 頁面換成新的 README。

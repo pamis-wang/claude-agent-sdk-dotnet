@@ -7,7 +7,7 @@
 - 調查日期：2026-11-03
 - 官方 Python：claude-agent-sdk 0.2.177（8abce11）
 - 官方 TypeScript：@anthropic-ai/claude-agent-sdk 0.3.317
-- .NET：PamisWang.ClaudeAgentSdk 0.1.0-preview.6（002066b）
+- .NET：PamisWang.ClaudeAgentSdk 0.1.0-preview.6（002066b），加上還沒發佈的 `ExtraArguments`
 - .NET 版對照 Python 0.2.174；0.2.175、0.2.176 只更新打包的 Claude CLI（2.1.314、2.1.316）；0.2.177 打包 CLI 2.1.317，新增的 `HookMatcher.on_failure` 屬於 .NET 刻意不做的 hook。.NET 用到的 API 都沒有變動，所以功能面仍以最新版對照。TypeScript 欄位依套件內的 `sdk.d.ts` 型別判斷。
 
 相關文件：[Claude .NET vs Codex .NET](claude-vs-codex-dotnet.zh-TW.md)。[Codex .NET 與官方 SDK 的對照](https://github.com/pamis-wang/codex-agent-sdk-dotnet/blob/main/docs/comparison-with-official-sdks.zh-TW.md)在 codex-agent-sdk-dotnet repo。
@@ -15,15 +15,17 @@
 ## 重點
 
 1. **定位是互動式 client 的子集移植**：.NET 版對應 Python 的 `ClaudeSDKClient`（連線、送訊息、收回覆、批准工具、中斷、接續 session），沒有一次性的 `query()` 函式，也沒有公開的自訂 Transport。
-2. **選項涵蓋約四分之一**：Python `ClaudeAgentOptions` 有 49 個欄位、TypeScript `Options` 有 69 個；.NET `ClaudeAgentOptions` 有 13 個，集中在對話本身最常用的部分。
+2. **選項涵蓋約四分之一**：Python `ClaudeAgentOptions` 有 49 個欄位、TypeScript `Options` 有 69 個；.NET `ClaudeAgentOptions` 有 14 個，集中在對話本身最常用的部分。沒有專屬選項的 CLI 旗標可以用 `ExtraArguments` 帶。
 3. **刻意不做的四塊**：hook 回呼、SDK 內的 MCP server（自訂工具）、session store、transcript mirror。README 已寫明不在範圍內。
 4. **比官方多的地方**：`ApplyFlagSettingsAsync`（Python 沒有，照 TS 協定）、`SetModelAsync` 回傳完整模型 ID、`WarningCallback`、每則訊息保留 `Raw` 且不丟掉不認得的訊息（Python 直接略過）、Windows 拒絕執行 `.cmd`、AOT 相容。
-5. **測試比較紮實**：190 個測試，含從真實 CLI 錄下來的協定樣本（`Fixtures/*.jsonl`）與假 CLI 子程序測試。
+5. **測試比較紮實**：203 個測試，含從真實 CLI 錄下來的協定樣本（`Fixtures/*.jsonl`）與假 CLI 子程序測試。
 6. **授權**：Python 是 MIT，可以移植；TypeScript 是專有授權（© Anthropic），.NET 版只參考它送出的協定格式，沒有移植程式碼。
 
 ## 功能矩陣
 
 圖例：✅ 支援、⭐ 加強、🟡 部分、❌ 無、— 不適用（⭐ 表示比官方多做的部分）
+
+只是 CLI 旗標的功能（例如 `--max-turns`、`--add-dir`）標 ❌，表示 .NET 沒有專屬的選項；這些旗標還是可以用 `ExtraArguments` 帶。
 
 ### 進入點與連線
 
@@ -36,7 +38,7 @@
 | **附帶 CLI** | ✅ 套件內附 Claude CLI（`_bundled`） | ✅ 套件內附 | ❌ 要自己安裝原生的 `claude.exe` |
 | **版本檢查** | 🟡 `_check_claude_version`，警告寫進 `logging` | — 型別定義看不出來 | ⭐ `WarningCallback`；`CLAUDE_AGENT_SDK_SKIP_VERSION_CHECK` 可跳過 |
 | **環境變數** | ✅ `env` | ✅ `env` | ✅ `EnvironmentVariables` |
-| **額外 CLI 參數** | ✅ `extra_args` | ✅ `extraArgs` | ❌ |
+| **額外 CLI 參數** | ✅ `extra_args` | ✅ `extraArgs` | ⭐ `ExtraArguments`；另外擋下寫錯的旗標名稱與 SDK 自己控制的旗標 |
 | **工作目錄** | ✅ `cwd`、`add_dirs` | ✅ `cwd`、`additionalDirectories` | 🟡 `WorkingDirectory`（沒有額外目錄） |
 | **stderr** | ✅ `stderr` | ✅ `stderr` | ✅ `StandardErrorCallback` |
 | **訊息大小上限** | ✅ `max_buffer_size` | — | ✅ `MaxBufferSize` |
@@ -100,16 +102,16 @@
 
 | 項目 | 官方 Python | 官方 TypeScript | .NET |
 |---|---|---|---|
-| 程式碼 | 約 13,500 行 Python | 封裝成 bundle，型別定義 `sdk.d.ts` 約 10,500 行 | 手寫約 2,560 行 C#（48 個檔案） |
+| 程式碼 | 約 13,500 行 Python | 封裝成 bundle，型別定義 `sdk.d.ts` 約 10,500 行 | 手寫約 2,620 行 C#（48 個檔案） |
 | 公開的 client 方法 | `ClaudeSDKClient` 15 個 | `Query` 31 個 | `ClaudeAgentClient` 7 個非同步方法 |
-| 選項數 | 49 | 69 | 13 |
-| 測試 | pytest | 未公開 | 190 個（xUnit），含真實 CLI 錄下的協定樣本與假 CLI 子程序 |
+| 選項數 | 49 | 69 | 14 |
+| 測試 | pytest | 未公開 | 203 個（xUnit），含真實 CLI 錄下的協定樣本與假 CLI 子程序 |
 | 授權 | MIT | 專有（© Anthropic） | MIT，NOTICE 保留 Python SDK 的授權聲明 |
 | AOT | — | — | `IsAotCompatible` |
 
 ## 建議的下一步
 
-- 優先補上最常被問到、實作成本低的選項：`AllowedTools`、`PermissionMode`（含 `SetPermissionModeAsync`）、`MaxTurns`、`AddDirectories`、`ExtraArgs`、`OutputFormat`。
+- 把最常被問到的 CLI 旗標補成型別化的選項：`AllowedTools`、`PermissionMode`、`MaxTurns`、`AddDirectories`、`OutputFormat`。這些現在都能用 `ExtraArguments` 帶，補成選項是為了型別檢查與說明。`SetPermissionModeAsync` 是 control request，不是旗標，還是要另外實作。
 - `ForkSession` 與 `ContinueConversation` 只是 CLI 參數，加起來很快；session 列表類的函式需要讀 `~/.claude/projects`，工作量較大。
 - `TaskStarted` 這類背景任務訊息目前只能從 `SystemMessage.Raw` 讀，可以補專屬型別。
 - Hook 與 SDK 內 MCP server 維持不做，除非有明確需求；它們需要雙向的 control protocol 與 JSON-RPC 橋接，複雜度最高。

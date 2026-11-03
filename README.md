@@ -25,7 +25,7 @@ dotnet add package PamisWang.ClaudeAgentSdk --prerelease
 ## Compared with the official SDKs
 
 - Covers Python's `ClaudeSDKClient`: multi-turn conversations, tool approval, interrupts, and resuming sessions; there is no one-shot `query()`.
-- The 13 options most used in conversations are supported (Python has 49, TypeScript 69); permission modes, allowed-tool lists, turn limits, MCP, and subagents are not available yet, and what is not planned is listed under [Scope](#scope).
+- The 14 options most used in conversations are supported (Python has 49, TypeScript 69); permission modes, allowed-tool lists, turn limits, MCP, and subagents have no dedicated options yet, but anything that is just a CLI flag can be passed through `ExtraArguments`. What is not planned is listed under [Scope](#scope).
 - Beyond the official SDKs: `ApplyFlagSettingsAsync` (missing from Python), `SetModelAsync` returning the full model ID, `WarningCallback`, `Raw` on every message with unrecognized messages kept, refusing `.cmd` on Windows, and AOT compatibility.
 - Full comparisons: [with the official Python and TypeScript SDKs](https://github.com/pamis-wang/claude-agent-sdk-dotnet/blob/main/docs/comparison-with-official-sdks.md), [with PamisWang.CodexAgentSdk](https://github.com/pamis-wang/claude-agent-sdk-dotnet/blob/main/docs/claude-vs-codex-dotnet.md)
 
@@ -46,6 +46,8 @@ var options = new ClaudeAgentOptions
     ResumeSessionId = null,               // a session ID to resume
     IncludePartialMessages = true,        // receive output as it streams
     DisallowedTools = ["AskUserQuestion"],
+    // CLI flags without a dedicated option; null means a flag without a value
+    ExtraArguments = new Dictionary<string, string?> { ["max-turns"] = "10", ["strict-mcp-config"] = null },
     // asked before a tool runs; cancelled on interrupt
     CanUseTool = async (request, cancellationToken) =>
         await AskUserAsync(request.ToolName, request.Input, cancellationToken)
@@ -87,6 +89,7 @@ await client.ApplyFlagSettingsAsync(new JsonObject { ["effortLevel"] = "max" });
 ```
 
 - Without `SystemPrompt`, an empty system prompt is sent, as in the Python SDK, so Claude does not get Claude Code's default one (coding guidelines, working directory, git status, and so on); use `SystemPromptPreset` to match the terminal experience.
+- `ExtraArguments` keys are flag names without the leading `--`. A value starting with `-` is sent as `--flag=value` so the CLI does not read it as another flag. `output-format` and `input-format` are controlled by this package and rejected, and so is `permission-prompt-tool` when `CanUseTool` is set.
 - The available models and the effort levels each supports are listed under `models` in `ServerInfo`.
 - `ReceiveResponseAsync` stops after the turn's `ResultMessage`; `ReceiveMessagesAsync` keeps reading across turns, which suits a background receive loop.
 - Every message carries `Raw` (the original JSON) for fields without a property; unrecognized message types arrive as `UnknownMessage` instead of being dropped.
@@ -105,6 +108,7 @@ Supported:
 - System prompts: Claude Code's default, appended to the default, fully custom, or read from a file
 - Choosing the model and effort (`--model`, `--effort`), and switching models mid-conversation (`set_model`)
 - Applying settings mid-conversation, such as the effort level (`apply_flag_settings`; missing from the Python SDK, follows the TypeScript SDK's protocol)
+- Extra CLI arguments for flags without a dedicated option (`extra_args`)
 
 Not planned: hook callbacks, in-SDK MCP servers, session stores, transcript mirroring.
 
