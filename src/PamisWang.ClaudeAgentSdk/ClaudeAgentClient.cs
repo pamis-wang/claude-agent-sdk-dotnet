@@ -85,7 +85,8 @@ public sealed class ClaudeAgentClient : IAsyncDisposable
     /// <exception cref="InvalidOperationException">已經連線過。</exception>
     /// <exception cref="ArgumentException">
     /// 選項組不出 CLI 參數：Windows 上的 <see cref="ClaudeAgentOptions.ResumeSessionId"/> 含有 cmd.exe 的特殊字元，
-    /// 或 <see cref="ClaudeAgentOptions.ExtraArguments"/> 的旗標名稱不能用。
+    /// <see cref="ClaudeAgentOptions.ExtraArguments"/> 的旗標名稱不能用，
+    /// 或 <see cref="ClaudeAgentOptions.MaxTurns"/>、<see cref="ClaudeAgentOptions.MaxBudgetUsd"/> 不大於 0（<see cref="ArgumentOutOfRangeException"/>）。
     /// </exception>
     public async Task ConnectAsync(CancellationToken cancellationToken = default)
     {

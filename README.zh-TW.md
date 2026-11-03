@@ -25,7 +25,7 @@ dotnet add package PamisWang.ClaudeAgentSdk --prerelease
 ## 跟官方 SDK 比較
 
 - 對應 Python 的 `ClaudeSDKClient`：多輪對話、批准工具、中斷、接續 session；沒有一次性的 `query()`。
-- 支援對話最常用的 14 個選項（Python 有 49 個、TypeScript 有 69 個）；權限模式、允許的工具清單、輪數上限、MCP、subagent 等還沒有專屬的選項，但只是 CLI 旗標的可以用 `ExtraArguments` 帶。刻意不做的見下方的[範圍](#範圍)。
+- 支援對話最常用的 17 個選項（Python 有 49 個、TypeScript 有 69 個）；權限模式、允許的工具清單、MCP、subagent 等還沒有專屬的選項，但只是 CLI 旗標的可以用 `ExtraArguments` 帶。刻意不做的見下方的[範圍](#範圍)。
 - 比官方多：`ApplyFlagSettingsAsync`（Python 沒有）、`SetModelAsync` 回傳完整的模型 ID、`WarningCallback`、每則訊息都有 `Raw` 而且不丟掉不認得的訊息、Windows 拒絕執行 `.cmd`、AOT 相容。
 - 完整對照：[與官方 Python、TypeScript SDK](docs/comparison-with-official-sdks.zh-TW.md)、[與 PamisWang.CodexAgentSdk](docs/claude-vs-codex-dotnet.zh-TW.md)
 
@@ -46,8 +46,10 @@ var options = new ClaudeAgentOptions
     ResumeSessionId = null,               // 接續舊 session 時填 session ID
     IncludePartialMessages = true,        // 逐段收到輸出
     DisallowedTools = ["AskUserQuestion"],
+    MaxTurns = 20,                        // 模型來回次數的上限
+    MaxBudgetUsd = 1.00m,                 // 費用上限（美元）
     // 還沒有專屬選項的 CLI 旗標；null 表示只帶旗標、不帶值
-    ExtraArguments = new Dictionary<string, string?> { ["max-turns"] = "10", ["strict-mcp-config"] = null },
+    ExtraArguments = new Dictionary<string, string?> { ["add-dir"] = @"D:\work\shared", ["strict-mcp-config"] = null },
     // 工具要執行前詢問；中斷時 cancellationToken 會被取消
     CanUseTool = async (request, cancellationToken) =>
         await AskUserAsync(request.ToolName, request.Input, cancellationToken)
@@ -89,6 +91,8 @@ await client.ApplyFlagSettingsAsync(new JsonObject { ["effortLevel"] = "max" });
 ```
 
 - 沒指定 `SystemPrompt` 時跟 Python SDK 一樣傳空的系統提示詞，Claude 不會拿到 Claude Code 預設的那份（寫程式的準則、工作目錄與 git 狀態等）；要跟在終端機用時一樣，指定 `SystemPromptPreset`。
+- `MaxTurns` 每次送出訊息各自計算，超過時 `ResultMessage.Subtype` 是 `error_max_turns`。`MaxBudgetUsd` 是整個 session 累計（同 `TotalCostUsd`），每次呼叫完 API 才檢查，所以實際花費會超過一點；超過時是 `error_max_budget_usd`，之後的訊息也直接這樣結束。兩者都必須大於 0。
+- 結構化輸出：`OutputSchema` 給 JSON Schema（`JsonObject`），結果在 `ResultMessage.StructuredOutput`，可以用 `Deserialize<T>()` 轉成自己的型別。Claude Code 是讓模型呼叫工具交出結果，會多用掉幾次模型來回，`MaxTurns` 不要設太小。
 - `ExtraArguments` 的 key 是旗標名稱，不含開頭的 `--`。值是 `-` 開頭時送成 `--旗標=值`，免得 CLI 把它當成另一個旗標。`output-format`、`input-format` 由這個套件控制，放了會丟例外；設定了 `CanUseTool` 時，`permission-prompt-tool` 也一樣。
 - 可以選的模型與各自支援的思考深度，在 `ServerInfo` 的 `models` 裡。
 - `ReceiveResponseAsync` 讀到這一輪的 `ResultMessage` 為止；`ReceiveMessagesAsync` 跨越多輪一直讀，適合在背景持續接收。
@@ -108,6 +112,8 @@ await client.ApplyFlagSettingsAsync(new JsonObject { ["effortLevel"] = "max" });
 - 系統提示詞：Claude Code 預設的、在預設後面附加、自訂全文、從檔案讀
 - 指定模型與思考深度（`--model`、`--effort`），對話中途換模型（`set_model`）
 - 對話中途套用設定，例如換思考深度（`apply_flag_settings`；Python SDK 沒有，照 TypeScript SDK 的協定）
+- 輪數與費用上限（`--max-turns`、`--max-budget-usd`）
+- 結構化輸出（`--json-schema`）
 - 額外的 CLI 參數，給還沒有專屬選項的旗標用（`extra_args`）
 
 不做：hook 回呼、SDK 內的 MCP server、session store、transcript mirror。

@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using PamisWang.ClaudeAgentSdk.Transport;
 
 namespace PamisWang.ClaudeAgentSdk.Tests.Transport;
@@ -267,6 +268,14 @@ public sealed class SubprocessTransportTests : IDisposable
             ResumeSessionId = "34953276-f9da-4b8c-a789-77d8ee05bc37",
             IncludePartialMessages = true,
             DisallowedTools = ["AskUserQuestion"],
+            MaxTurns = 3,
+            MaxBudgetUsd = 0.5m,
+            // schema 的 JSON 也要整個當成一個參數送到子程序
+            OutputSchema = new JsonObject
+            {
+                ["type"] = "object",
+                ["properties"] = new JsonObject { ["回答"] = new JsonObject { ["type"] = "string", ["description"] = "簡短 & 直接" } },
+            },
             // 引號、空白、& 都要原樣送到子程序，Windows 也是
             ExtraArguments = new Dictionary<string, string?>
             {

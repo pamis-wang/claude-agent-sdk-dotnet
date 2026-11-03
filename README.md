@@ -25,7 +25,7 @@ dotnet add package PamisWang.ClaudeAgentSdk --prerelease
 ## Compared with the official SDKs
 
 - Covers Python's `ClaudeSDKClient`: multi-turn conversations, tool approval, interrupts, and resuming sessions; there is no one-shot `query()`.
-- The 14 options most used in conversations are supported (Python has 49, TypeScript 69); permission modes, allowed-tool lists, turn limits, MCP, and subagents have no dedicated options yet, but anything that is just a CLI flag can be passed through `ExtraArguments`. What is not planned is listed under [Scope](#scope).
+- The 17 options most used in conversations are supported (Python has 49, TypeScript 69); permission modes, allowed-tool lists, MCP, and subagents have no dedicated options yet, but anything that is just a CLI flag can be passed through `ExtraArguments`. What is not planned is listed under [Scope](#scope).
 - Beyond the official SDKs: `ApplyFlagSettingsAsync` (missing from Python), `SetModelAsync` returning the full model ID, `WarningCallback`, `Raw` on every message with unrecognized messages kept, refusing `.cmd` on Windows, and AOT compatibility.
 - Full comparisons: [with the official Python and TypeScript SDKs](https://github.com/pamis-wang/claude-agent-sdk-dotnet/blob/main/docs/comparison-with-official-sdks.md), [with PamisWang.CodexAgentSdk](https://github.com/pamis-wang/claude-agent-sdk-dotnet/blob/main/docs/claude-vs-codex-dotnet.md)
 
@@ -46,8 +46,10 @@ var options = new ClaudeAgentOptions
     ResumeSessionId = null,               // a session ID to resume
     IncludePartialMessages = true,        // receive output as it streams
     DisallowedTools = ["AskUserQuestion"],
+    MaxTurns = 20,                        // limit on model round trips
+    MaxBudgetUsd = 1.00m,                 // spending limit in USD
     // CLI flags without a dedicated option; null means a flag without a value
-    ExtraArguments = new Dictionary<string, string?> { ["max-turns"] = "10", ["strict-mcp-config"] = null },
+    ExtraArguments = new Dictionary<string, string?> { ["add-dir"] = @"D:\work\shared", ["strict-mcp-config"] = null },
     // asked before a tool runs; cancelled on interrupt
     CanUseTool = async (request, cancellationToken) =>
         await AskUserAsync(request.ToolName, request.Input, cancellationToken)
@@ -89,6 +91,8 @@ await client.ApplyFlagSettingsAsync(new JsonObject { ["effortLevel"] = "max" });
 ```
 
 - Without `SystemPrompt`, an empty system prompt is sent, as in the Python SDK, so Claude does not get Claude Code's default one (coding guidelines, working directory, git status, and so on); use `SystemPromptPreset` to match the terminal experience.
+- `MaxTurns` counts each message you send separately; going over it ends the turn with `ResultMessage.Subtype` set to `error_max_turns`. `MaxBudgetUsd` covers the whole session (like `TotalCostUsd`) and is checked after each API call, so spending can go slightly over; going over it ends the turn with `error_max_budget_usd`, and later messages end the same way. Both must be greater than 0.
+- Structured output: give `OutputSchema` a JSON Schema (a `JsonObject`); the result is in `ResultMessage.StructuredOutput`, and `Deserialize<T>()` turns it into your own type. Claude Code has the model call a tool to hand in the result, which takes a few extra round trips, so do not set `MaxTurns` too low.
 - `ExtraArguments` keys are flag names without the leading `--`. A value starting with `-` is sent as `--flag=value` so the CLI does not read it as another flag. `output-format` and `input-format` are controlled by this package and rejected, and so is `permission-prompt-tool` when `CanUseTool` is set.
 - The available models and the effort levels each supports are listed under `models` in `ServerInfo`.
 - `ReceiveResponseAsync` stops after the turn's `ResultMessage`; `ReceiveMessagesAsync` keeps reading across turns, which suits a background receive loop.
@@ -108,6 +112,8 @@ Supported:
 - System prompts: Claude Code's default, appended to the default, fully custom, or read from a file
 - Choosing the model and effort (`--model`, `--effort`), and switching models mid-conversation (`set_model`)
 - Applying settings mid-conversation, such as the effort level (`apply_flag_settings`; missing from the Python SDK, follows the TypeScript SDK's protocol)
+- Turn and spending limits (`--max-turns`, `--max-budget-usd`)
+- Structured output (`--json-schema`)
 - Extra CLI arguments for flags without a dedicated option (`extra_args`)
 
 Not planned: hook callbacks, in-SDK MCP servers, session stores, transcript mirroring.

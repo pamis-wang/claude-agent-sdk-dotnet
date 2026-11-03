@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Text.Json.Nodes;
 using PamisWang.ClaudeAgentSdk.Permissions;
 
 namespace PamisWang.ClaudeAgentSdk;
@@ -50,6 +51,32 @@ public sealed class ClaudeAgentOptions
     public IReadOnlyList<string> DisallowedTools { get; init; } = [];
 
     /// <summary>
+    /// 模型來回次數的上限（<c>--max-turns</c>），每次送出訊息各自計算，不是整個 session 累計。
+    /// 超過就停下來，<see cref="Messages.ResultMessage.Subtype"/> 是 <c>error_max_turns</c>。沒指定就不限制。
+    /// 必須大於 0，否則 <see cref="ClaudeAgentClient.ConnectAsync"/> 丟出 <see cref="ArgumentOutOfRangeException"/>。
+    /// </summary>
+    public int? MaxTurns { get; init; }
+
+    /// <summary>
+    /// API 費用的上限，單位美元（<c>--max-budget-usd</c>），跟 <see cref="Messages.ResultMessage.TotalCostUsd"/> 一樣是整個 session 累計。
+    /// 每次呼叫完 API 才檢查，所以實際花費會超過一點；超過時這一輪以 <c>error_max_budget_usd</c>
+    /// （<see cref="Messages.ResultMessage.Subtype"/>）結束，之後送的訊息也直接這樣結束，不再呼叫 API。沒指定就不限制。
+    /// 必須大於 0，否則 <see cref="ClaudeAgentClient.ConnectAsync"/> 丟出 <see cref="ArgumentOutOfRangeException"/>。
+    /// Python 是 <c>float</c>；這裡是金額，用 <see langword="decimal"/>。
+    /// </summary>
+    public decimal? MaxBudgetUsd { get; init; }
+
+    /// <summary>
+    /// 結構化輸出的 JSON Schema（<c>--json-schema</c>）。指定之後，符合 schema 的結果放在
+    /// <see cref="Messages.ResultMessage.StructuredOutput"/>，可以用 <c>Deserialize&lt;T&gt;()</c> 轉成自己的型別。
+    /// Claude Code 是讓模型呼叫 <c>StructuredOutput</c> 工具交出結果，會多用掉模型來回的次數（簡單的問題實測用了 3 次），
+    /// 同時設定 <see cref="MaxTurns"/> 時不要設太小。
+    /// 對應 Python 的 <c>output_format</c>：Python 寫成 <c>{"type": "json_schema", "schema": ...}</c>，
+    /// 目前只有 <c>json_schema</c> 一種，所以這裡直接放 schema。
+    /// </summary>
+    public JsonObject? OutputSchema { get; init; }
+
+    /// <summary>
     /// 工具要執行前、需要使用者批准時呼叫。設定之後 CLI 改用 control 協定詢問（<c>--permission-prompt-tool stdio</c>）。
     /// 等待期間 CLI 撤回詢問（例如這一輪被中斷），<see cref="CancellationToken"/> 會被取消，這時回傳什麼都不會送出。
     /// </summary>
@@ -59,7 +86,7 @@ public sealed class ClaudeAgentOptions
     public IReadOnlyDictionary<string, string> EnvironmentVariables { get; init; } = ReadOnlyDictionary<string, string>.Empty;
 
     /// <summary>
-    /// 額外的 CLI 參數，給這個類別還沒有對應屬性的旗標用，例如 <c>max-turns</c>、<c>add-dir</c>、<c>permission-mode</c>。
+    /// 額外的 CLI 參數，給這個類別還沒有對應屬性的旗標用，例如 <c>add-dir</c>、<c>permission-mode</c>、<c>mcp-config</c>。
     /// key 是旗標名稱，不含開頭的 <c>--</c>；value 是 <see langword="null"/> 時只帶旗標、不帶值。
     /// 值整個當成一個參數傳，可以是含引號的 JSON；<c>-</c> 開頭的值寫成 <c>--旗標=值</c>，免得被 CLI 當成另一個旗標。
     /// 已經有對應屬性的旗標請用屬性設定。<c>output-format</c>、<c>input-format</c> 由這個套件控制，不能放；

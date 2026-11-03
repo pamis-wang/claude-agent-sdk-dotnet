@@ -8,7 +8,10 @@ namespace PamisWang.ClaudeAgentSdk.Messages;
 /// </summary>
 public sealed record ResultMessage : ClaudeMessage
 {
-    /// <summary><c>success</c>，或 <c>error_during_execution</c>、<c>error_max_turns</c> 這類錯誤。</summary>
+    /// <summary>
+    /// <c>success</c>，或 <c>error_during_execution</c>、<c>error_max_turns</c>、<c>error_max_budget_usd</c>、
+    /// <c>error_max_structured_output_retries</c> 這類錯誤。
+    /// </summary>
     public required string Subtype { get; init; }
 
     /// <summary>
@@ -34,7 +37,7 @@ public sealed record ResultMessage : ClaudeMessage
     /// <summary>出錯的說明。</summary>
     public IReadOnlyList<string> Errors { get; init; } = [];
 
-    /// <summary>估計的費用（美元）。</summary>
+    /// <summary>這個 session 到目前為止累計的估計費用（美元），不是只有這一輪。</summary>
     public double? TotalCostUsd { get; init; }
 
     /// <summary>模型停下來的原因。</summary>
@@ -55,6 +58,9 @@ public sealed record ResultMessage : ClaudeMessage
     /// <summary>各模型的用量與費用，原樣保留。</summary>
     public JsonElement? ModelUsage { get; init; }
 
-    /// <summary>要求結構化輸出時的結果。</summary>
+    /// <summary>
+    /// 指定 <see cref="ClaudeAgentOptions.OutputSchema"/> 時，符合 schema 的結果；可以用 <c>Deserialize&lt;T&gt;()</c> 轉成自己的型別。
+    /// 模型一直產生不符合 schema 的輸出時，<see cref="Subtype"/> 是 <c>error_max_structured_output_retries</c>。
+    /// </summary>
     public JsonElement? StructuredOutput { get; init; }
 }

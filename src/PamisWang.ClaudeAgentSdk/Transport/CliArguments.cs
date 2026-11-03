@@ -1,4 +1,6 @@
 using System.Buffers;
+using System.Globalization;
+using System.Numerics;
 
 namespace PamisWang.ClaudeAgentSdk.Transport;
 
@@ -15,6 +17,9 @@ internal static class CliArguments
     /// <exception cref="ArgumentException">
     /// Windows 上 <see cref="ClaudeAgentOptions.ResumeSessionId"/> 含有 cmd.exe 的特殊字元，
     /// 或 <see cref="ClaudeAgentOptions.ExtraArguments"/> 的旗標名稱不能用。
+    /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <see cref="ClaudeAgentOptions.MaxTurns"/> 或 <see cref="ClaudeAgentOptions.MaxBudgetUsd"/> 不大於 0。
     /// </exception>
     public static IReadOnlyList<string> Build(ClaudeAgentOptions options, bool isWindows)
     {
@@ -38,6 +43,17 @@ internal static class CliArguments
             default:
                 // 只用預設的系統提示：不帶參數，CLI 就用自己的
                 break;
+        }
+
+        // 跟 Python 一樣排在 --disallowedTools 前面
+        if (options.MaxTurns is { } maxTurns)
+        {
+            args.AddRange(["--max-turns", FormatPositive(nameof(options.MaxTurns), maxTurns)]);
+        }
+
+        if (options.MaxBudgetUsd is { } maxBudgetUsd)
+        {
+            args.AddRange(["--max-budget-usd", FormatPositive(nameof(options.MaxBudgetUsd), maxBudgetUsd)]);
         }
 
         if (options.DisallowedTools.Count > 0)
@@ -97,8 +113,30 @@ internal static class CliArguments
             args.AddRange(["--effort", options.Effort]);
         }
 
+        if (options.OutputSchema is not null)
+        {
+            // 跟 Python 一樣排在 --effort 後面。JSON 物件一定是 { 開頭，不會被 CLI 當成另一個旗標
+            args.AddRange(["--json-schema", options.OutputSchema.ToJsonString()]);
+        }
+
         args.AddRange(["--input-format", "stream-json"]);
         return args;
+    }
+
+    /// <summary>
+    /// 上限類的選項必須大於 0：0 沒有意義，負數會送出 <c>-</c> 開頭、被 CLI 當成另一個旗標的值。
+    /// Python 遇到 0 略過旗標、負數照送。數字照 <see cref="CultureInfo.InvariantCulture"/> 寫，
+    /// 不然在小數點是逗號的語系（例如 de-DE）會送出 <c>1,5</c>。
+    /// </summary>
+    private static string FormatPositive<T>(string optionName, T value)
+        where T : INumber<T>
+    {
+        if (value <= T.Zero)
+        {
+            throw new ArgumentOutOfRangeException(optionName, value, $"{optionName} 必須大於 0。");
+        }
+
+        return value.ToString(null, CultureInfo.InvariantCulture);
     }
 
     /// <summary>
