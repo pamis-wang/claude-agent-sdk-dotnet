@@ -1,6 +1,6 @@
 # Changelog
 
-## 未發佈
+## 0.1.0-preview.8（2026-11-03）
 
 - `ClaudeAgentOptions.MaxTurns`：模型來回次數的上限（`--max-turns`），每次送出訊息各自計算；超過時 `ResultMessage.Subtype` 是 `error_max_turns`。
 - `ClaudeAgentOptions.MaxBudgetUsd`：API 費用的上限，單位美元（`--max-budget-usd`），整個 session 累計；每次呼叫完 API 才檢查，
