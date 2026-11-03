@@ -276,6 +276,18 @@ async def apply_flag_settings(s: Session) -> None:
         await query._send_control_request({"subtype": "apply_flag_settings", "settings": {"effortLevel": None}})  # noqa: SLF001
 
 
+async def context_usage(s: Session) -> None:
+    async with s.client() as client:
+        s.recorder.note("還沒說話就查，不帶 detail（CLI 預設 full）")
+        await client.get_context_usage()
+        await turn(client, "只回答「好」。")
+        # Python SDK 的 get_context_usage() 沒有 detail 參數（對應 TypeScript SDK 的 getContextUsage({ detail })），直接送 control request
+        s.recorder.note("說過一句之後，用 detail: summary 再查一次")
+        query = client._query  # noqa: SLF001
+        assert query is not None
+        await query._send_control_request({"subtype": "get_context_usage", "detail": "summary"})  # noqa: SLF001
+
+
 @dataclass(frozen=True)
 class Scenario:
     name: str
@@ -295,6 +307,7 @@ SCENARIOS = [
     Scenario("interrupt_during_permission", "等權限回覆時中斷（CLI 送 control_cancel_request）", interrupt_during_permission),
     Scenario("set_model", "對話中途換模型，再換回預設（set_model）", set_model),
     Scenario("apply_flag_settings", "對話中途改思考深度，再清掉（apply_flag_settings，Python SDK 沒有公開的方法）", apply_flag_settings),
+    Scenario("context_usage", "查 context 用量：說話前用預設、說一句之後用 summary（get_context_usage）", context_usage),
 ]
 
 

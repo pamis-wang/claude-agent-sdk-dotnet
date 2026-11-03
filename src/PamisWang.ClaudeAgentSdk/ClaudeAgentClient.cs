@@ -205,6 +205,22 @@ public sealed class ClaudeAgentClient : IAsyncDisposable
         return RequireProtocol().ApplyFlagSettingsAsync(settings, cancellationToken);
     }
 
+    /// <summary>
+    /// 查目前 context window 的用量，依類別拆開，跟 CLI 的 <c>/context</c> 指令顯示的一樣。對應 Python 的 <c>get_context_usage()</c>。
+    /// <paramref name="detail"/> 不指定時 CLI 用 <see cref="ContextUsageDetail.Full"/>；Python SDK 沒有這個參數，對應 TypeScript SDK 的 <c>detail</c>。
+    /// 還沒說話也可以查。MCP server 在背景連線，剛連線就查的話可能還沒算進它們的工具。
+    /// </summary>
+    /// <exception cref="ClaudeAgentException">CLI 回應處理失敗，例如舊版 CLI 不支援。</exception>
+    /// <exception cref="MessageParseException">回應缺少必要欄位或格式不對。</exception>
+    /// <exception cref="TimeoutException">CLI 逾時沒有回應。</exception>
+    public async Task<ContextUsage> GetContextUsageAsync(
+        ContextUsageDetail? detail = null,
+        CancellationToken cancellationToken = default)
+    {
+        var response = await RequireProtocol().GetContextUsageAsync(detail, cancellationToken).ConfigureAwait(false);
+        return MessageParser.ParseContextUsage(response);
+    }
+
     /// <summary>關閉：取消等待中的權限詢問、關閉 stdin 讓 CLI 寫完 session 後結束，逾時才強制結束。</summary>
     public async ValueTask DisposeAsync()
     {

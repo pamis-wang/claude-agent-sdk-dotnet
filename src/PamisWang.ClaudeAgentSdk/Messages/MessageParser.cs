@@ -41,6 +41,61 @@ internal static class MessageParser
         return message with { Raw = data, SessionId = OptionalString(data, "session_id"), Uuid = OptionalString(data, "uuid") };
     }
 
+    /// <summary>解析 <c>get_context_usage</c> 的回應。</summary>
+    /// <exception cref="MessageParseException">缺少必要欄位或格式不對。</exception>
+    public static ContextUsage ParseContextUsage(JsonElement data)
+    {
+        try
+        {
+            return new ContextUsage
+            {
+                Model = RequiredString(data, "model"),
+                TotalTokens = (int)RequiredInt64(data, "totalTokens"),
+                MaxTokens = (int)RequiredInt64(data, "maxTokens"),
+                RawMaxTokens = (int)RequiredInt64(data, "rawMaxTokens"),
+                Percentage = Required(data, "percentage").GetDouble(),
+                IsAutoCompactEnabled = Required(data, "isAutoCompactEnabled").GetBoolean(),
+                AutoCompactThreshold = (int?)OptionalInt64(data, "autoCompactThreshold"),
+                Categories = [.. Required(data, "categories").EnumerateArray().Select(category => new ContextUsageCategory
+                {
+                    Id = OptionalString(category, "id"),
+                    Name = RequiredString(category, "name"),
+                    Tokens = (int)RequiredInt64(category, "tokens"),
+                    Kind = OptionalString(category, "kind"),
+                    IsDeferred = Optional(category, "isDeferred")?.GetBoolean() ?? false,
+                    Raw = category,
+                })],
+                MemoryFiles = OptionalArray(data, "memoryFiles", file => new ContextUsageMemoryFile
+                {
+                    Path = RequiredString(file, "path"),
+                    Type = RequiredString(file, "type"),
+                    Tokens = (int)RequiredInt64(file, "tokens"),
+                    Raw = file,
+                }),
+                McpTools = OptionalArray(data, "mcpTools", tool => new ContextUsageMcpTool
+                {
+                    Name = RequiredString(tool, "name"),
+                    ServerName = RequiredString(tool, "serverName"),
+                    Tokens = (int)RequiredInt64(tool, "tokens"),
+                    IsLoaded = Optional(tool, "isLoaded")?.GetBoolean(),
+                    Raw = tool,
+                }),
+                Agents = OptionalArray(data, "agents", agent => new ContextUsageAgent
+                {
+                    AgentType = RequiredString(agent, "agentType"),
+                    Source = RequiredString(agent, "source"),
+                    Tokens = (int)RequiredInt64(agent, "tokens"),
+                    Raw = agent,
+                }),
+                Raw = data,
+            };
+        }
+        catch (Exception e) when (e is FormatException or InvalidOperationException)
+        {
+            throw new MessageParseException($"get_context_usage 的回應格式不對：{e.Message}", data, e);
+        }
+    }
+
     private static AssistantMessage ParseAssistant(JsonElement data)
     {
         var message = Required(data, "message");
@@ -180,4 +235,8 @@ internal static class MessageParser
 
     private static long? OptionalInt64(JsonElement element, string name) =>
         Optional(element, name) is { } value ? (value.TryGetInt64(out var number) ? number : (long)value.GetDouble()) : null;
+
+    /// <summary>沒有這個欄位時是空的清單；有的話一定要是陣列。</summary>
+    private static List<T> OptionalArray<T>(JsonElement element, string name, Func<JsonElement, T> parse) =>
+        Optional(element, name) is { } array ? [.. array.EnumerateArray().Select(parse)] : [];
 }

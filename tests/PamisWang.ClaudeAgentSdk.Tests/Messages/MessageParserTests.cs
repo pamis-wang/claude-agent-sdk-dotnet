@@ -223,6 +223,64 @@ public sealed class MessageParserTests
         Assert.Throws<MessageParseException>(() => Parse(json));
     }
 
+    [Fact]
+    public void ParseContextUsage_PythonSdkShape_ReadsListsAndLeavesNewerFieldsEmpty()
+    {
+        // Python SDK 測試用的形狀：比 CLI 2.1.309 舊，category 沒有 id、kind，也沒有 autoCompactThreshold；
+        // 錄製時不載入使用者設定，樣本裡的 memoryFiles、mcpTools、agents 都是空的，所以在這裡測
+        var usage = MessageParser.ParseContextUsage(JsonSerializer.Deserialize<JsonElement>("""
+            {
+              "categories": [
+                {"name": "System prompt", "tokens": 3200, "color": "#888"},
+                {"name": "MCP tools (deferred)", "tokens": 164, "color": "#999", "isDeferred": true}
+              ],
+              "totalTokens": 98200, "maxTokens": 155000, "rawMaxTokens": 200000, "percentage": 49.1,
+              "model": "claude-sonnet-4-5", "isAutoCompactEnabled": true,
+              "memoryFiles": [{"path": "/home/u/project/CLAUDE.md", "type": "Project", "tokens": 512}],
+              "mcpTools": [{"name": "mcp__ref__search", "serverName": "ref", "tokens": 164}],
+              "agents": [{"agentType": "coder", "source": "sdk", "tokens": 299}],
+              "gridRows": [], "apiUsage": null
+            }
+            """));
+
+        Assert.Equal(49.1, usage.Percentage);
+        Assert.Null(usage.AutoCompactThreshold);
+        Assert.All(usage.Categories, category => Assert.Null(category.Id));
+        Assert.All(usage.Categories, category => Assert.Null(category.Kind));
+        Assert.Equal([false, true], usage.Categories.Select(category => category.IsDeferred));
+        Assert.Equal("#888", usage.Categories[0].Raw.GetProperty("color").GetString());
+        Assert.Equal(new ContextUsageMemoryFile { Path = "/home/u/project/CLAUDE.md", Type = "Project", Tokens = 512 }, usage.MemoryFiles.Single() with { Raw = default });
+        var tool = usage.McpTools.Single();
+        Assert.Equal(("mcp__ref__search", "ref", 164), (tool.Name, tool.ServerName, tool.Tokens));
+        Assert.Null(tool.IsLoaded);
+        Assert.Equal(new ContextUsageAgent { AgentType = "coder", Source = "sdk", Tokens = 299 }, usage.Agents.Single() with { Raw = default });
+    }
+
+    [Fact]
+    public void ParseContextUsage_ListsMissing_AreEmpty()
+    {
+        var usage = MessageParser.ParseContextUsage(JsonSerializer.Deserialize<JsonElement>("""
+            {"categories": [], "totalTokens": 0, "maxTokens": 1, "rawMaxTokens": 1, "percentage": 0, "model": "m", "isAutoCompactEnabled": false}
+            """));
+
+        Assert.Empty(usage.MemoryFiles);
+        Assert.Empty(usage.McpTools);
+        Assert.Empty(usage.Agents);
+    }
+
+    [Theory]
+    [InlineData("""{"categories": [], "totalTokens": 0, "maxTokens": 1, "rawMaxTokens": 1, "percentage": 0, "isAutoCompactEnabled": false}""", "model")]
+    [InlineData("""{"totalTokens": 0, "maxTokens": 1, "rawMaxTokens": 1, "percentage": 0, "model": "m", "isAutoCompactEnabled": false}""", "categories")]
+    [InlineData("""{"categories": [{"tokens": 1}], "totalTokens": 0, "maxTokens": 1, "rawMaxTokens": 1, "percentage": 0, "model": "m", "isAutoCompactEnabled": false}""", "name")]
+    [InlineData("""{"categories": [], "totalTokens": 0, "maxTokens": 1, "rawMaxTokens": 1, "percentage": 0, "model": "m", "isAutoCompactEnabled": "yes"}""", "get_context_usage")]
+    public void ParseContextUsage_MissingOrMalformedField_Throws(string json, string mentioned)
+    {
+        var error = Assert.Throws<MessageParseException>(() => MessageParser.ParseContextUsage(JsonSerializer.Deserialize<JsonElement>(json)));
+
+        Assert.Contains(mentioned, error.Message, StringComparison.Ordinal);
+        Assert.NotNull(error.Raw);
+    }
+
     private static ClaudeMessage Parse(string json) => MessageParser.Parse(JsonSerializer.Deserialize<JsonElement>(json));
 
     private static T First<T>(string fixture, Func<T, bool> predicate)

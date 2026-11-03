@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.0-preview.9（2026-11-03）
+
+- `ClaudeAgentClient.GetContextUsageAsync`：查目前 context window 的用量，依類別拆開，跟 CLI 的 `/context` 指令一樣；
+  對應 Python SDK 的 `get_context_usage()`。回傳型別化的 `ContextUsage`：總量、上限、百分比、自動壓縮的設定、
+  各類別（`ContextUsageCategory`）、memory 檔、MCP 工具、subagent；`messageBreakdown`、`skills`、`apiUsage` 等其他欄位從 `Raw` 讀。
+- 類別的 `Id` 與 `Kind`（`used`、`free`、`buffer`、`deferred`）照 CLI 實際送的欄位讀，Python SDK 的型別沒有宣告；
+  兩者都是字串，CLI 之後多出新的值也不會解析失敗。
+- `ContextUsageDetail`：`Summary` 不呼叫 token 計算 API，用估計值很快回來；不指定時 CLI 用 `Full`。
+  Python SDK 沒有這個參數，照 TypeScript SDK `getContextUsage()` 的 `detail`。
+- 新增協定樣本 `context_usage.jsonl`（CLI 2.1.309）。
+
 ## 0.1.0-preview.8（2026-11-03）
 
 - `ClaudeAgentOptions.MaxTurns`：模型來回次數的上限（`--max-turns`），每次送出訊息各自計算；超過時 `ResultMessage.Subtype` 是 `error_max_turns`。
